@@ -1,0 +1,5 @@
+# EXAMPLE ONLY — fictional data shaped like TCS Payment Invoice API (COD-API-UserManual.pdf). Not a real merchant export.
+cnsg_no,cust_ref,bkg_dat,consignee,orgn,dstn,wtt_bkg,paymentperiod,status,codamount,courier_charges,gst,cus_no,invoiceno
+779400000001,ORD-10001,2026-08-07T00:00:00,EXAMPLE Buyer A,LHE,KHI,0.5,07_Aug_to_13_Aug_2026,Delivered,2550,83,13.28,882161,LHEGEW000001
+779400000002,ORD-10002,2026-08-07T00:00:00,EXAMPLE Buyer B,LHE,LHE,1.0,07_Aug_to_13_Aug_2026,Delivered,1899,83,13.28,882161,LHEGEW000001
+779400000003,ORD-10003,2026-08-07T00:00:00,EXAMPLE Buyer C,LHE,HSL,2.0,07_Aug_to_13_Aug_2026,Return To Origin,0,116,18.56,882161,LHEGEW000001

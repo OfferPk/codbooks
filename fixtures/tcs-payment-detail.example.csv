@@ -1,0 +1,5 @@
+# EXAMPLE ONLY — fictional data shaped like TCS Payment Detail / Status API. Field names include spaces as in the official PDF.
+booking date,cn by courier,cn status,order no,payment status,amount paid,parcel weight,city,delivery charges,delivery date,payment date
+09/09/2026,779400000101,OK,Internet 591128,Y,2432,1,KHI,118,10/09/2026,14/09/2026
+09/09/2026,779400000102,OK,Internet 590823,Y,1725,2,SLT,174,13/09/2026,14/09/2026
+09/09/2026,779400000103,RO,Internet 591139,N,0,0.5,TMK,116,16/09/2026,

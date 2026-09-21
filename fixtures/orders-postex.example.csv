@@ -1,0 +1,6 @@
+# EXAMPLE ONLY — fictional orders matching postex-payment-status.example.csv
+external_order_id,awb,cn,customer_name,cod_amount_pkr,currency,ordered_at,source,status
+ORD-PX-9001,CX-EXAMPLE000001,CX-EXAMPLE000001,EXAMPLE PX Buyer 1,2200,PKR,2026-08-10T10:00:00+05:00,woo,delivered
+ORD-PX-9002,CX-EXAMPLE000002,CX-EXAMPLE000002,EXAMPLE PX Buyer 2,1750,PKR,2026-08-11T10:00:00+05:00,daraz,delivered
+ORD-PX-9003,CX-EXAMPLE000003,CX-EXAMPLE000003,EXAMPLE PX Buyer 3,3100,PKR,2026-08-12T10:00:00+05:00,whatsapp,shipped
+ORD-PX-UNMATCHED,CX-EXAMPLE000099,CX-EXAMPLE000099,EXAMPLE PX Orphan,900,PKR,2026-08-05T10:00:00+05:00,woo,delivered

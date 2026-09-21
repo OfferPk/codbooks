@@ -1,0 +1,5 @@
+# EXAMPLE ONLY — portal-shaped PostEx settlement with fee columns (synthetic; public API lacks fees)
+orderRefNumber,trackingNumber,settle,settlementDate,cprNumber,cod_amount,fee_delivery,fee_gst,fee_wht,fee_return,fee_cash_handling,fee_other,amount_paid
+ORD-PX-9001,CX-EXAMPLE000001,true,2026-08-20,CPR-EX-10001,2200,120,19.2,0,0,0,0,2060.8
+ORD-PX-9002,CX-EXAMPLE000002,true,2026-08-20,CPR-EX-10001,1750,100,16,0,0,0,0,1634
+ORD-PX-9003,CX-EXAMPLE000003,false,,,,,,,0,0,0,0,0,0

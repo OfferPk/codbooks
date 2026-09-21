@@ -1,0 +1,5 @@
+# EXAMPLE ONLY — fictional rows shaped like PostEx payment-status API (Integration Guide v4.1.9). Not a portal export.
+orderRefNumber,trackingNumber,settle,settlementDate,upfrontPaymentDate,cprNumber_1,reservePaymentDate,cprNumber_2
+ORD-PX-9001,CX-EXAMPLE000001,true,2026-08-20,2026-08-12,CPR-EX-10001,2026-08-20,CPR-EX-10002
+ORD-PX-9002,CX-EXAMPLE000002,true,2026-08-20,2026-08-13,CPR-EX-10001,2026-08-20,CPR-EX-10002
+ORD-PX-9003,CX-EXAMPLE000003,false,,,,,,
