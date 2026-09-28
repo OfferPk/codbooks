@@ -6,8 +6,9 @@ import { FormEvent, useState } from "react";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("owner@codbooks.local");
-  const [password, setPassword] = useState("owner123");
+  // Never prefill credentials (production-safe; avoid shipping demo passwords in UI).
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -76,7 +77,12 @@ export default function LoginPage() {
           </button>
         </form>
         <p className="mt-4 text-center text-sm text-slate-500">
-          Demo: owner@codbooks.local / owner123 ·{" "}
+          {process.env.NODE_ENV !== "production" ? (
+            <>
+              Local demo accounts: see README after{" "}
+              <code className="text-xs">npm run seed</code> ·{" "}
+            </>
+          ) : null}
           <Link href="/register" className="text-sky-700 hover:underline">
             Register new seller
           </Link>

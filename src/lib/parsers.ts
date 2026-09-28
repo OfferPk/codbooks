@@ -20,6 +20,7 @@ export interface ParsedOrder {
   ordered_at: string | null;
   source: string;
   status: string;
+  courier_code: string | null;
   raw: Record<string, string>;
 }
 
@@ -92,6 +93,21 @@ export function parseOrdersCsv(text: string): {
       errors.push(`Row ${i + 2}: missing order id / AWB / CN`);
       return;
     }
+    const courierRaw = getField(
+      r,
+      "courier",
+      "courier_code",
+      "courier_name"
+    ).toLowerCase();
+    let courier_code: string | null = null;
+    if (courierRaw === "tcs" || courierRaw.includes("tcs")) courier_code = "tcs";
+    else if (
+      courierRaw === "postex" ||
+      courierRaw.includes("postex") ||
+      courierRaw.includes("post ex")
+    ) {
+      courier_code = "postex";
+    }
     rows.push({
       external_order_id: normalizeOrderId(external),
       awb,
@@ -102,6 +118,7 @@ export function parseOrdersCsv(text: string): {
       ordered_at: getField(r, "ordered_at", "order_date", "date") || null,
       source: getField(r, "source") || "csv",
       status: getField(r, "status") || "shipped",
+      courier_code,
       raw: r,
     });
   });

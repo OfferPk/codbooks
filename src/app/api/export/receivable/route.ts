@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { AuthError, requireUser } from "@/lib/auth";
+import { AuthError, requireAction } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { paisaToPkr } from "@/lib/money";
+import { csvLine } from "@/lib/csv";
 
 export async function GET() {
   try {
-    const user = await requireUser();
+    const user = await requireAction("export");
     const db = getDb();
     const rows = db
       .prepare(
@@ -36,22 +37,23 @@ export async function GET() {
       "reference_date",
       "notes",
     ];
-    const lines = [header.join(",")];
+    const lines = [csvLine(header)];
     for (const r of rows) {
-      const cells = [
-        r.status,
-        r.courier || "",
-        r.external_order_id || "",
-        r.awb || "",
-        r.cn || "",
-        csvEscape(String(r.customer_name || "")),
-        paisaToPkr(Number(r.expected_paisa || 0)).toFixed(2),
-        paisaToPkr(Number(r.remitted_paisa || 0)).toFixed(2),
-        paisaToPkr(Number(r.short_paisa || 0)).toFixed(2),
-        r.reference_date || "",
-        csvEscape(String(r.notes || "")),
-      ];
-      lines.push(cells.join(","));
+      lines.push(
+        csvLine([
+          r.status,
+          r.courier || "",
+          r.external_order_id || "",
+          r.awb || "",
+          r.cn || "",
+          r.customer_name || "",
+          paisaToPkr(Number(r.expected_paisa || 0)).toFixed(2),
+          paisaToPkr(Number(r.remitted_paisa || 0)).toFixed(2),
+          paisaToPkr(Number(r.short_paisa || 0)).toFixed(2),
+          r.reference_date || "",
+          r.notes || "",
+        ])
+      );
     }
     const body = lines.join("\n");
     return new NextResponse(body, {
@@ -67,9 +69,4 @@ export async function GET() {
     }
     throw e;
   }
-}
-
-function csvEscape(s: string): string {
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
 }

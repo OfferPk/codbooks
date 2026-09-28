@@ -20,6 +20,7 @@ interface OrderRow {
   order_amount_paisa: number;
   ordered_at: string | null;
   status: string | null;
+  courier_id: string | null;
 }
 
 interface SettlementRow {
@@ -66,7 +67,7 @@ export function runMatch(orgId: string, userId: string): {
 
   const orders = db
     .prepare(
-      `SELECT id, external_order_id, awb, cn, order_amount_paisa, ordered_at, status
+      `SELECT id, external_order_id, awb, cn, order_amount_paisa, ordered_at, status, courier_id
        FROM orders WHERE org_id = ?`
     )
     .all(orgId) as OrderRow[];
@@ -94,6 +95,11 @@ export function runMatch(orgId: string, userId: string): {
       | { id: string }
       | undefined;
     if (existing) {
+      if (o.courier_id) {
+        db.prepare(
+          `UPDATE shipments SET courier_id = COALESCE(courier_id, ?) WHERE id = ?`
+        ).run(o.courier_id, existing.id);
+      }
       orderShipments.set(o.id, existing.id);
       continue;
     }
@@ -104,7 +110,7 @@ export function runMatch(orgId: string, userId: string): {
       o.id,
       o.awb,
       o.cn,
-      null,
+      o.courier_id,
       o.status,
       o.order_amount_paisa,
       o.ordered_at,
@@ -313,7 +319,7 @@ export function runMatch(orgId: string, userId: string): {
         o.order_amount_paisa,
         0,
         o.order_amount_paisa,
-        null,
+        o.courier_id,
         o.awb,
         o.cn,
         "Order with no settlement line",

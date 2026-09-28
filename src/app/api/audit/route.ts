@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { AuthError, requireUser } from "@/lib/auth";
+import { AuthError, requireRoles } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 
 export async function GET() {
   try {
-    const user = await requireUser();
+    const user = await requireRoles("owner", "accountant");
     const db = getDb();
     const rows = db
       .prepare(

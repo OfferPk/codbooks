@@ -7,48 +7,104 @@ import {
   detectTemplate,
 } from "./parsers";
 import { runMatch } from "./match";
+import {
+  chmodPrivateFile,
+  ensurePrivateDir,
+  MODE_FILE,
+} from "./fs-perms";
 
 const UPLOAD_DIR = path.join(process.cwd(), "data", "uploads");
 
 function ensureUploadDir() {
-  if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  ensurePrivateDir(path.join(process.cwd(), "data"));
+  ensurePrivateDir(UPLOAD_DIR);
+}
+
+/**
+ * Server-generated storage path only. Client filename is never used in the
+ * filesystem path (display name stays in uploads.filename).
+ */
+export function resolveSafeUploadPath(
+  orgId: string,
+  uploadId: string,
+  originalFilename: string
+): { storageKey: string; fullPath: string } {
+  if (/[/\\]|\.\./.test(orgId) || /[/\\]|\.\./.test(uploadId)) {
+    throw new Error("Invalid upload identifiers");
+  }
+  const base = path.basename(originalFilename || "upload.csv");
+  if (/[/\\]|\.\./.test(base)) {
+    throw new Error("Invalid filename");
+  }
+  let ext = path.extname(base).toLowerCase();
+  if (!/^\.(csv|txt|tsv)$/.test(ext)) ext = ".csv";
+  const storageKey = path.join(orgId, `${uploadId}${ext}`);
+  const root = path.resolve(UPLOAD_DIR);
+  const fullPath = path.resolve(root, storageKey);
+  const rel = path.relative(root, fullPath);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new Error("Upload path escapes upload root");
+  }
+  return { storageKey: storageKey.replace(/\\/g, "/"), fullPath };
+}
+
+function writeUploadFile(fullPath: string, text: string) {
+  ensurePrivateDir(path.dirname(fullPath));
+  fs.writeFileSync(fullPath, text, { encoding: "utf8", mode: MODE_FILE });
+  chmodPrivateFile(fullPath);
+}
+
+function resolveCourierId(
+  codeFromRow: string | null | undefined,
+  hint?: string
+): string | null {
+  const code = (codeFromRow || hint || "").toLowerCase().trim();
+  if (!code) return null;
+  if (code === "tcs" || code === "postex") return getCourierIdByCode(code);
+  return getCourierIdByCode(code);
 }
 
 export function ingestOrders(
   orgId: string,
   userId: string,
   filename: string,
-  text: string
+  text: string,
+  courierHint?: string
 ): { uploadId: string; rowCount: number; errors: string[] } {
   ensureUploadDir();
   const db = getDb();
   const uploadId = crypto.randomUUID();
-  const storageKey = `${orgId}/${uploadId}-${filename}`;
-  const fullPath = path.join(UPLOAD_DIR, storageKey);
-  fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-  fs.writeFileSync(fullPath, text, "utf8");
+  const { storageKey, fullPath } = resolveSafeUploadPath(
+    orgId,
+    uploadId,
+    filename
+  );
+  writeUploadFile(fullPath, text);
 
   const { rows, errors } = parseOrdersCsv(text);
+  const hintCourierId = resolveCourierId(null, courierHint);
   const now = new Date().toISOString();
+  const displayName = path.basename(filename || "upload.csv");
 
   const insertUpload = db.prepare(
     `INSERT INTO uploads
       (id, org_id, kind, courier_id, storage_key, filename, uploaded_by, created_at, row_count, status, error_summary, template_hint)
-     VALUES (?, ?, 'orders', NULL, ?, ?, ?, ?, ?, ?, ?, 'orders')`
+     VALUES (?, ?, 'orders', ?, ?, ?, ?, ?, ?, ?, ?, 'orders')`
   );
   const insertOrder = db.prepare(
     `INSERT INTO orders
-      (id, org_id, upload_id, external_order_id, awb, cn, customer_name,
+      (id, org_id, upload_id, courier_id, external_order_id, awb, cn, customer_name,
        order_amount_paisa, currency, ordered_at, source, status, raw_json, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
   const tx = db.transaction(() => {
     insertUpload.run(
       uploadId,
       orgId,
+      hintCourierId,
       storageKey,
-      filename,
+      displayName,
       userId,
       now,
       rows.length,
@@ -56,10 +112,13 @@ export function ingestOrders(
       errors.length ? errors.slice(0, 20).join("; ") : null
     );
     for (const r of rows) {
+      const rowCourier =
+        resolveCourierId(r.courier_code, undefined) || hintCourierId;
       insertOrder.run(
         crypto.randomUUID(),
         orgId,
         uploadId,
+        rowCourier,
         r.external_order_id || null,
         r.awb || null,
         r.cn || null,
@@ -78,9 +137,10 @@ export function ingestOrders(
 
   audit(orgId, userId, "upload_orders", {
     upload_id: uploadId,
-    filename,
+    filename: displayName,
     row_count: rows.length,
     errors: errors.length,
+    courier_hint: courierHint || null,
   });
 
   return { uploadId, rowCount: rows.length, errors };
@@ -102,16 +162,19 @@ export function ingestCpr(
   ensureUploadDir();
   const db = getDb();
   const uploadId = crypto.randomUUID();
-  const storageKey = `${orgId}/${uploadId}-${filename}`;
-  const fullPath = path.join(UPLOAD_DIR, storageKey);
-  fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-  fs.writeFileSync(fullPath, text, "utf8");
+  const { storageKey, fullPath } = resolveSafeUploadPath(
+    orgId,
+    uploadId,
+    filename
+  );
+  writeUploadFile(fullPath, text);
 
   const parsed = parseSettlementByTemplate(text, courierHint);
   const courierId = parsed.courierCode
     ? getCourierIdByCode(parsed.courierCode)
     : null;
   const now = new Date().toISOString();
+  const displayName = path.basename(filename || "upload.csv");
 
   if (!courierId) {
     db.prepare(
@@ -122,7 +185,7 @@ export function ingestCpr(
       uploadId,
       orgId,
       storageKey,
-      filename,
+      displayName,
       userId,
       now,
       parsed.errors.join("; ") || "Unknown courier template",
@@ -159,7 +222,7 @@ export function ingestCpr(
       orgId,
       courierId,
       storageKey,
-      filename,
+      displayName,
       userId,
       now,
       parsed.rows.length,
@@ -196,7 +259,7 @@ export function ingestCpr(
 
   audit(orgId, userId, "upload_cpr", {
     upload_id: uploadId,
-    filename,
+    filename: displayName,
     row_count: parsed.rows.length,
     template: parsed.template,
     courier: parsed.courierCode,

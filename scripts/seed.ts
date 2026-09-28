@@ -1,13 +1,27 @@
 /**
  * Seed CodBooks demo org + users + fixture CSVs matched.
  * Usage: npm run seed
+ *
+ * Demo accounts are for local/dev only. Refuses to run when NODE_ENV=production
+ * unless ALLOW_DEMO_SEED=1 is explicitly set.
  */
 import fs from "fs";
 import path from "path";
 import bcrypt from "bcryptjs";
-import Database from "better-sqlite3";
+import { chmodDbArtifacts, ensurePrivateDir } from "../src/lib/fs-perms";
 
 const root = process.cwd();
+
+if (
+  process.env.NODE_ENV === "production" &&
+  process.env.ALLOW_DEMO_SEED !== "1"
+) {
+  console.error(
+    "Refusing to seed demo credentials in production.\n" +
+      "Set ALLOW_DEMO_SEED=1 only for disposable demo environments."
+  );
+  process.exit(1);
+}
 const dbPath = process.env.DATABASE_PATH
   ? path.isAbsolute(process.env.DATABASE_PATH)
     ? process.env.DATABASE_PATH
@@ -15,7 +29,7 @@ const dbPath = process.env.DATABASE_PATH
   : path.join(root, "data", "codbooks.db");
 
 const dir = path.dirname(dbPath);
-if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+ensurePrivateDir(dir);
 for (const suffix of ["", "-wal", "-shm"]) {
   const p = dbPath + suffix;
   if (fs.existsSync(p)) fs.unlinkSync(p);
@@ -63,8 +77,8 @@ async function main() {
   const read = (name: string) =>
     fs.readFileSync(path.join(fixtures, name), "utf8");
 
-  ingestOrders(orgId, ownerId, "orders-tcs.example.csv", read("orders-tcs.example.csv"));
-  ingestOrders(orgId, ownerId, "orders-postex.example.csv", read("orders-postex.example.csv"));
+  ingestOrders(orgId, ownerId, "orders-tcs.example.csv", read("orders-tcs.example.csv"), "tcs");
+  ingestOrders(orgId, ownerId, "orders-postex.example.csv", read("orders-postex.example.csv"), "postex");
   ingestCpr(orgId, ownerId, "tcs-payment-invoice.example.csv", read("tcs-payment-invoice.example.csv"), "tcs");
   ingestCpr(orgId, ownerId, "tcs-payment-detail.example.csv", read("tcs-payment-detail.example.csv"), "tcs");
   ingestCpr(orgId, ownerId, "postex-settlement-portal.example.csv", read("postex-settlement-portal.example.csv"), "postex");
@@ -73,11 +87,12 @@ async function main() {
   audit(orgId, ownerId, "seed_complete", { matchRunId, summary });
 
   closeDb();
+  chmodDbArtifacts(dbPath);
 
   console.log("Seeded CodBooks at", dbPath);
   console.log("Org: Demo COD Store");
   console.log("");
-  console.log("Demo logins:");
+  console.log("LOCAL/DEV demo logins (never use in production):");
   console.log("  Owner:      owner@codbooks.local / owner123");
   console.log("  Accountant: accountant@codbooks.local / acct123");
   console.log("  Ops:        ops@codbooks.local / ops123");

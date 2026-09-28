@@ -43,3 +43,28 @@ export function getField(
   }
   return "";
 }
+
+/**
+ * Sanitize a CSV cell for export: neutralize spreadsheet formula injection
+ * (leading = + - @ and tab/CR) then apply normal CSV quoting.
+ */
+export function sanitizeCsvCell(value: unknown): string {
+  let s = value == null ? "" : String(value);
+  if (/^[=+\-@\t\r]/.test(s)) {
+    s = `'${s}`;
+  }
+  if (/[",\n\r]/.test(s)) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+/** Join cells into one CSV line using sanitizeCsvCell on every cell. */
+export function csvLine(cells: unknown[]): string {
+  return cells.map(sanitizeCsvCell).join(",");
+}
+
+/** Alias for sanitizeCsvCell. */
+export function csvEscape(v: string | number | null | undefined): string {
+  return sanitizeCsvCell(v);
+}

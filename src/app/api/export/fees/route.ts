@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { AuthError, requireUser } from "@/lib/auth";
+import { AuthError, requireAction } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { paisaToPkr } from "@/lib/money";
+import { csvLine } from "@/lib/csv";
 
 export async function GET() {
   try {
-    const user = await requireUser();
+    const user = await requireAction("export");
     const db = getDb();
     const rows = db
       .prepare(
@@ -38,7 +39,7 @@ export async function GET() {
       "fee_other_pkr",
       "fees_total_pkr",
     ];
-    const lines = [header.join(",")];
+    const lines = [csvLine(header)];
     for (const r of rows) {
       const fees =
         Number(r.fee_delivery_paisa || 0) +
@@ -49,7 +50,7 @@ export async function GET() {
         Number(r.fee_other_paisa || 0);
       const remitted = Number(r.remitted_paisa || 0);
       lines.push(
-        [
+        csvLine([
           r.courier,
           r.awb || "",
           r.cn || "",
@@ -65,7 +66,7 @@ export async function GET() {
           paisaToPkr(Number(r.fee_cash_handling_paisa || 0)).toFixed(2),
           paisaToPkr(Number(r.fee_other_paisa || 0)).toFixed(2),
           paisaToPkr(fees).toFixed(2),
-        ].join(",")
+        ])
       );
     }
     return new NextResponse(lines.join("\n"), {

@@ -142,3 +142,18 @@ export async function requireRoles(
   }
   return user;
 }
+
+/** Action → allowed roles. Accountant cannot mutate uploads/match. */
+export const ROLE_MATRIX = {
+  mutate: ["owner", "ops"] as Role[],
+  export: ["owner", "ops", "accountant"] as Role[],
+  audit: ["owner", "accountant"] as Role[],
+  read: ["owner", "ops", "accountant"] as Role[],
+} as const;
+
+export async function requireAction(
+  action: keyof typeof ROLE_MATRIX
+): Promise<SessionUser> {
+  return requireRoles(...ROLE_MATRIX[action]);
+}
+

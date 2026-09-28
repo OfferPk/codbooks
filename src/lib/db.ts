@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
-import fs from "fs";
 import path from "path";
+import { chmodDbArtifacts, ensurePrivateDir } from "./fs-perms";
 
 const DEFAULT_PATH = path.join(process.cwd(), "data", "codbooks.db");
 
@@ -21,14 +21,13 @@ export function getDb(): Database.Database {
 
   const dbPath = resolveDbPath();
   const dir = path.dirname(dbPath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+  ensurePrivateDir(dir);
 
   const db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   migrate(db);
+  chmodDbArtifacts(dbPath);
   dbInstance = db;
   return db;
 }
@@ -104,6 +103,7 @@ function migrate(db: Database.Database) {
       id TEXT PRIMARY KEY,
       org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
       upload_id TEXT REFERENCES uploads(id),
+      courier_id TEXT REFERENCES couriers(id),
       external_order_id TEXT,
       awb TEXT,
       cn TEXT,
@@ -202,6 +202,15 @@ function migrate(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_memberships_user ON memberships(user_id);
     CREATE INDEX IF NOT EXISTS idx_audit_org ON audit_events(org_id);
   `);
+
+  const orderCols = db.prepare("PRAGMA table_info(orders)").all() as Array<{
+    name: string;
+  }>;
+  if (!orderCols.some((c) => c.name === "courier_id")) {
+    db.exec(
+      "ALTER TABLE orders ADD COLUMN courier_id TEXT REFERENCES couriers(id)"
+    );
+  }
 
   // Seed courier catalog if empty
   const count = db.prepare("SELECT COUNT(*) as c FROM couriers").get() as {

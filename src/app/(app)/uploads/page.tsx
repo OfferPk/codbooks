@@ -93,20 +93,22 @@ export default function UploadsPage() {
               <option value="cpr">CPR / Settlement</option>
             </select>
           </div>
-          {kind === "cpr" && (
-            <div>
-              <label className="label">Courier hint (optional)</label>
-              <select
-                className="input"
-                value={courier}
-                onChange={(e) => setCourier(e.target.value)}
-              >
-                <option value="">Auto-detect</option>
-                <option value="tcs">TCS</option>
-                <option value="postex">PostEx</option>
-              </select>
-            </div>
-          )}
+          <div>
+            <label className="label">
+              Courier hint {kind === "orders" ? "(keeps unpaid attributed)" : "(optional)"}
+            </label>
+            <select
+              className="input"
+              value={courier}
+              onChange={(e) => setCourier(e.target.value)}
+            >
+              <option value="">
+                {kind === "orders" ? "None / from CSV column" : "Auto-detect"}
+              </option>
+              <option value="tcs">TCS</option>
+              <option value="postex">PostEx</option>
+            </select>
+          </div>
           <div className="min-w-[220px] flex-1">
             <label className="label">CSV file</label>
             <input className="input" type="file" name="file" accept=".csv,text/csv" required />

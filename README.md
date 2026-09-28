@@ -23,7 +23,9 @@ npm run dev
 
 Open http://localhost:3000
 
-### Demo logins
+### Demo logins (local/dev only)
+
+`npm run seed` creates these accounts for **local development**. Seed refuses to run when `NODE_ENV=production` unless `ALLOW_DEMO_SEED=1`. Do not use these passwords in any real deployment.
 
 | Role | Email | Password |
 |------|-------|----------|
@@ -62,5 +64,8 @@ Open http://localhost:3000
 ## Security notes
 
 - Session cookies are httpOnly; set `COOKIE_SECURE=false` for local HTTP (`next start`)
-- Uploads land in `data/uploads/` (gitignored)
+- Uploads land in `data/uploads/` (gitignored); filenames are server UUID-only
+- DB and uploads use owner-only modes (`0600` / `0700`)
+- Role matrix: owner+ops mutate uploads/match; accountant cannot mutate; audit is owner+accountant
 - Do not commit `data/*.db` or real merchant CPR files
+- Never seed demo credentials into production

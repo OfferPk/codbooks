@@ -49,7 +49,7 @@ describe("fixture golden path", () => {
   });
 
   it("TCS invoice + orders → statuses", () => {
-    ingestOrders(orgId, userId, "orders-tcs.csv", fx("orders-tcs.example.csv"));
+    ingestOrders(orgId, userId, "orders-tcs.csv", fx("orders-tcs.example.csv"), "tcs");
     ingestCpr(
       orgId,
       userId,
@@ -76,7 +76,8 @@ describe("fixture golden path", () => {
       orgId,
       userId,
       "orders-px.csv",
-      fx("orders-postex.example.csv")
+      fx("orders-postex.example.csv"),
+      "postex"
     );
     ingestCpr(
       orgId,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AuthError, requireUser } from "@/lib/auth";
+import { AuthError, requireRoles, requireUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { ingestOrders, ingestCpr } from "@/lib/ingest";
 import { runMatch } from "@/lib/match";
@@ -30,7 +30,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireUser();
+    const user = await requireRoles("owner", "ops");
     const form = await req.formData();
     const file = form.get("file") as File | null;
     const kind = String(form.get("kind") || "orders");
@@ -44,7 +44,13 @@ export async function POST(req: NextRequest) {
     const filename = file.name || "upload.csv";
 
     if (kind === "orders") {
-      const result = ingestOrders(user.org_id, user.id, filename, text);
+      const result = ingestOrders(
+        user.org_id,
+        user.id,
+        filename,
+        text,
+        courierHint || undefined
+      );
       let match = null;
       if (autoMatch && result.rowCount > 0) {
         match = runMatch(user.org_id, user.id);

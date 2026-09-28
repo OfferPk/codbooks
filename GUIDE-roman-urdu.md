@@ -35,13 +35,25 @@ npm run build
 COOKIE_SECURE=false npm start
 ```
 
-## 5. Demo login
+## 5. Demo login (sirf local/dev)
+
+Ye passwords **sirf local demo** ke liye hain. Production mein `npm run seed` block hai (unless `ALLOW_DEMO_SEED=1`). Live deploy par ye accounts mat rakho.
 
 | Role | Email | Password |
 |------|-------|----------|
 | Owner | owner@codbooks.local | owner123 |
 | Accountant | accountant@codbooks.local | acct123 |
 | Ops | ops@codbooks.local | ops123 |
+
+## 5b. Roles (zaroori)
+
+| Role | Kya kar sakta hai |
+|------|-------------------|
+| Owner | Sab kuch — upload, match, export, audit |
+| Ops | Upload + match (mutations); audit nahi |
+| Accountant | Read + export only — upload/match par **403** |
+
+Demo accounts sirf local/dev (`npm run seed`). Production mein seed band hai.
 
 ## 6. Features — har ek kya karta hai
 
