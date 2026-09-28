@@ -71,8 +71,8 @@ Demo accounts sirf local/dev (`npm run seed`). Production mein seed band hai.
 
 ### Aging board
 - Kahan: `/aging`
-- Kaise: unpaid/short lines buckets mein — Under 7 / 7–14 / Over 14
-- Result: courier ke sath amount + count
+- Kaise: unpaid/short lines buckets mein — Under 7 / 7–14 / Over 14; courier card click → `/matches?aging=…&courier=…`
+- Result: courier ke sath amount + count; Matches par aging chip
 
 ### Uploads
 - Kahan: `/uploads`
@@ -81,13 +81,14 @@ Demo accounts sirf local/dev (`npm run seed`). Production mein seed band hai.
 
 ### Matches
 - Kahan: `/matches`
-- Kaise: search box (AWB / CN / order id / customer), courier chips (tcs/postex), status filter; Clear button
+- Kaise: search box (AWB / CN / order id / customer), courier chips (tcs/postex), status filter, aging chip (Aging se aaye); Clear button
+- Notes: chase rows par owner/ops inline notes edit (accountant read-only)
 - Result: expected vs remitted vs short PKR; chase short/unpaid tez
 
 ### Exports
 - Kahan: `/exports`
-- Kaise: “Download receivable.csv” ya “Download fees.csv”
-- Result: Excel/Sheets mein khulne wala accountant CSV
+- Kaise: receivable — status preset (All / Chase=short+unpaid / Short / Unpaid) + optional from/to date; phir Download. Fees full run.
+- Result: Excel/Sheets mein khulne wala accountant CSV (period pack)
 
 ### Audit
 - Kahan: `/audit`

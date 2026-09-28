@@ -168,7 +168,9 @@ describe("role authz + security gates", () => {
 
   it("accountant can export receivable (200)", async () => {
     sessionCookie = acctSession;
-    const res = await getReceivable();
+    const res = await getReceivable({
+      nextUrl: new URL("http://localhost/api/export/receivable"),
+    } as unknown as import("next/server").NextRequest);
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toMatch(/text\/csv/);
   });

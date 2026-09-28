@@ -21,7 +21,7 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-describe("GET /api/matches filters (q + courier + status)", () => {
+describe("GET /api/matches filters (q + courier + status + aging + LIKE)", () => {
   let orgId: string;
   let ownerId: string;
   let ownerSession: string;
@@ -206,6 +206,50 @@ describe("GET /api/matches filters (q + courier + status)", () => {
         (m: { status: string; courier_code: string | null }) =>
           m.status === "short" &&
           (m.courier_code || "").toLowerCase() === "tcs"
+      )
+    ).toBe(true);
+  });
+  it("literal % in q does not match everything (LIKE escaped)", async () => {
+    const all = await getMatches(req(""));
+    const allBody = await all.json();
+    expect(allBody.matches.length).toBeGreaterThan(1);
+    const res = await getMatches(req(`?q=${encodeURIComponent("%")}`));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // Without escape, % would match every non-null field; with escape, only rows
+    // containing a literal % character — fixtures have none.
+    expect(body.matches.length).toBe(0);
+  });
+
+  it("filters by aging bucket + courier (unpaid|short contract)", async () => {
+    const { agingBucketFromDate } = await import("@/lib/aging");
+    const all = await getMatches(req("?courier=tcs"));
+    const allBody = await all.json();
+    const chase = allBody.matches.filter(
+      (m: { status: string }) => m.status === "unpaid" || m.status === "short"
+    );
+    expect(chase.length).toBeGreaterThan(0);
+    const byBucket: Record<string, typeof chase> = {};
+    for (const m of chase) {
+      const b = agingBucketFromDate(m.reference_date) || ">14";
+      (byBucket[b] ||= []).push(m);
+    }
+    const bucket = Object.keys(byBucket).sort(
+      (a, b) => byBucket[b].length - byBucket[a].length
+    )[0];
+    expect(bucket).toBeTruthy();
+    const res = await getMatches(
+      req(`?aging=${encodeURIComponent(bucket)}&courier=tcs`)
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.matches.length).toBeGreaterThan(0);
+    expect(
+      body.matches.every(
+        (m: { status: string; courier_code: string | null; reference_date: string | null }) =>
+          (m.status === "unpaid" || m.status === "short") &&
+          (m.courier_code || "").toLowerCase() === "tcs" &&
+          (agingBucketFromDate(m.reference_date) || ">14") === bucket
       )
     ).toBe(true);
   });

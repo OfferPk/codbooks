@@ -67,6 +67,7 @@ Open http://localhost:3000
 - Password minimum: **10** characters (register + team invite).
 - Soft in-memory rate limit on **login** and **register**: ≤10 failures per IP/email in 15 minutes → HTTP **429** with `Retry-After`. Single-node only (not shared across replicas).
 - Team roster + invite are **owner only** (API 403 + page redirect for ops/accountant).
+- Matches search `q` treats `%` / `_` / `\\` as **literal** characters (LIKE escaped), not wildcards.
 
 ## Security notes
 

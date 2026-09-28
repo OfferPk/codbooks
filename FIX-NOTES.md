@@ -67,3 +67,16 @@ Post dual-clear R2 hygiene + adoption gaps (inbox `IMPROVE-codbooks-20260928-163
 4. **Team invite** — owner-only `GET/POST /api/users`, `/team`, Nav gated; invite roles ops|accountant only.
 
 Release commit `92bd84f` not amended; no push.
+
+---
+
+## Unreleased pack 2 — 2026-09-28 (Asia/Karachi)
+
+Inbox `IMPROVE-codbooks-20260928-1644.md` (do not re-build 1633 items).
+
+1. **LIKE escape** — `src/lib/like.ts` + `ESCAPE '\\'` on Matches `q`.
+2. **Aging deep-links** — `aging` query on `GET /api/matches` (unpaid|short when status omitted); Aging cards → Matches; aging chip UI.
+3. **Chase notes** — `PATCH /api/matches/[id]`; owner/ops write; accountant 403; Notes column.
+4. **Receivable export filters** — status + from/to; Exports page presets.
+
+Built on `260f765`; no amend of release/`260f765`; no push.
