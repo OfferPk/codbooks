@@ -41,15 +41,15 @@ Ye passwords **sirf local demo** ke liye hain. Production mein `npm run seed` bl
 
 | Role | Email | Password |
 |------|-------|----------|
-| Owner | owner@codbooks.local | owner123 |
-| Accountant | accountant@codbooks.local | acct123 |
-| Ops | ops@codbooks.local | ops123 |
+| Owner | owner@codbooks.local | owner12345 |
+| Accountant | accountant@codbooks.local | acct12345 |
+| Ops | ops@codbooks.local | ops12345 |
 
 ## 5b. Roles (zaroori)
 
 | Role | Kya kar sakta hai |
 |------|-------------------|
-| Owner | Sab kuch — upload, match, export, audit |
+| Owner | Sab kuch — upload, match, export, audit, **Team invite** |
 | Ops | Upload + match (mutations); audit nahi |
 | Accountant | Read + export only — upload/match par **403** |
 
@@ -59,13 +59,15 @@ Demo accounts sirf local/dev (`npm run seed`). Production mein seed band hai.
 
 ### Login / Register
 - Kahan: `/login`, `/register`
-- Kaise: email + password; register naya seller org banata hai (role owner)
+- Kaise: email + password (**min 10 chars**); register naya seller org banata hai (role owner)
+- Rate limit: bohot failed login/register attempts → **429** (15 min window, single-node)
 - Result: `/health` par redirect
 
 ### Settlement Health
 - Kahan: `/health`
 - Kaise: seed ke baad numbers ready; warna pehle Uploads se CSV dalo
-- Result: PKR owed, short, >14 din aging, unmatched count; courier-wise breakdown
+- Empty org: dismissible **3-step checklist** (orders upload → CPR upload → Exports / Team); tip mein `fixtures/` + `COURIER_TEMPLATES.md`
+- Result: PKR owed, short, >14 din aging, unmatched count; courier-wise breakdown; counts deep-link `/matches?status=…`
 
 ### Aging board
 - Kahan: `/aging`
@@ -79,8 +81,8 @@ Demo accounts sirf local/dev (`npm run seed`). Production mein seed band hai.
 
 ### Matches
 - Kahan: `/matches`
-- Kaise: status filter (matched/short/unpaid/unmatched/double_paid)
-- Result: expected vs remitted vs short PKR
+- Kaise: search box (AWB / CN / order id / customer), courier chips (tcs/postex), status filter; Clear button
+- Result: expected vs remitted vs short PKR; chase short/unpaid tez
 
 ### Exports
 - Kahan: `/exports`
@@ -91,6 +93,12 @@ Demo accounts sirf local/dev (`npm run seed`). Production mein seed band hai.
 - Kahan: `/audit`
 - Kaise: sirf dekho
 - Result: kaunsi file kab upload hui, match run kab chala
+
+### Team (owner only)
+- Kahan: `/team` (nav sirf owner ko dikhe)
+- Kaise: roster dekho; invite form — name, email, role (`ops` | `accountant`), password min 10
+- Result: naya user + membership is org mein; pehle se user ho to attach (conflicting membership = 409)
+- Ops/accountant invite nahi kar sakte (**403**)
 
 ### Re-run match
 - Uploads page par “Re-run match” button

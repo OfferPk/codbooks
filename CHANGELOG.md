@@ -6,6 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: [SemVer](ht
 
 ## [Unreleased]
 
+### Added
+
+- **Team invite:** Owner-only `/team` + `GET/POST /api/users` to invite `ops` | `accountant` into the current seller org (create user or attach existing email without conflicting membership). Nav Team link hidden for non-owners.
+- **Matches chase filters:** `GET /api/matches` accepts `q` (AWB/CN/order id/customer substring) and `courier` (exact, case-insensitive) alongside `status`. UI: search, courier chips, status select, clear. Health cards / status counts / by-courier deep-link into filtered matches.
+- **Settlement Health first-run checklist:** Dismissible 3-step onboarding when no uploads or no match run — upload orders → upload CPR → Exports / Team. Tip points at `fixtures/` examples + `COURIER_TEMPLATES.md`. Dismiss persisted in `localStorage` keyed by user id.
+
+### Security
+
+- Password minimum raised to **10** on register + team invite (UI `minLength` + API).
+- Soft in-memory rate limit on **login** and **register**: ≤10 failures per IP/email in 15 minutes → HTTP **429** with `Retry-After` (single-node; not shared across replicas).
+- Seed demo passwords bumped to ≥10 (`owner12345` / `acct12345` / `ops12345`); still production-gated unless `ALLOW_DEMO_SEED=1`.
+
 ## [0.1.0] — 2026-09-28
 
 ### Added

@@ -5,6 +5,17 @@ import {
   setSessionCookie,
 } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import {
+  checkRateLimit,
+  MIN_PASSWORD_LENGTH,
+  recordRateLimitFailure,
+} from "@/lib/rate-limit";
+
+function clientIp(req: NextRequest): string {
+  const xf = req.headers.get("x-forwarded-for");
+  if (xf) return xf.split(",")[0].trim() || "unknown";
+  return req.headers.get("x-real-ip") || "unknown";
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,15 +26,33 @@ export async function POST(req: NextRequest) {
     const password = String(body.password || "");
     const name = String(body.name || "").trim();
     const orgName = String(body.org_name || "").trim() || `${name}'s Store`;
+
+    const ip = clientIp(req);
+    const ipKey = `register:ip:${ip}`;
+    const lim = checkRateLimit(ipKey);
+    if (!lim.ok) {
+      return NextResponse.json(
+        {
+          error: `Too many registration attempts. Try again in ${lim.retryAfterSec}s.`,
+        },
+        {
+          status: 429,
+          headers: { "Retry-After": String(lim.retryAfterSec) },
+        }
+      );
+    }
+
     if (!email || !password || !name) {
       return NextResponse.json(
         { error: "Name, email, and password required" },
         { status: 400 }
       );
     }
-    if (password.length < 6) {
+    if (password.length < MIN_PASSWORD_LENGTH) {
       return NextResponse.json(
-        { error: "Password must be at least 6 characters" },
+        {
+          error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
+        },
         { status: 400 }
       );
     }
@@ -32,6 +61,7 @@ export async function POST(req: NextRequest) {
       .prepare("SELECT id FROM users WHERE email = ?")
       .get(email);
     if (existing) {
+      recordRateLimitFailure(ipKey);
       return NextResponse.json(
         { error: "Email already registered" },
         { status: 409 }

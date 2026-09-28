@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
-const LINKS = [
+const BASE_LINKS = [
   { href: "/health", label: "Settlement Health" },
   { href: "/aging", label: "Aging" },
   { href: "/uploads", label: "Uploads" },
@@ -23,6 +23,10 @@ export function Nav({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const links =
+    role === "owner"
+      ? [...BASE_LINKS, { href: "/team", label: "Team" }]
+      : BASE_LINKS;
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -38,7 +42,7 @@ export function Nav({
             CodBooks
           </Link>
           <nav className="flex flex-wrap gap-1">
-            {LINKS.map((l) => {
+            {links.map((l) => {
               const active = pathname.startsWith(l.href);
               return (
                 <Link

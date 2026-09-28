@@ -59,9 +59,9 @@ async function main() {
   const insUser = db.prepare(
     `INSERT INTO users (id, email, password_hash, name, created_at) VALUES (?, ?, ?, ?, ?)`
   );
-  insUser.run(ownerId, "owner@codbooks.local", hash("owner123"), "Demo Owner", now);
-  insUser.run(acctId, "accountant@codbooks.local", hash("acct123"), "Demo Accountant", now);
-  insUser.run(opsId, "ops@codbooks.local", hash("ops123"), "Demo Ops", now);
+  insUser.run(ownerId, "owner@codbooks.local", hash("owner12345"), "Demo Owner", now);
+  insUser.run(acctId, "accountant@codbooks.local", hash("acct12345"), "Demo Accountant", now);
+  insUser.run(opsId, "ops@codbooks.local", hash("ops12345"), "Demo Ops", now);
 
   const insMem = db.prepare(
     `INSERT INTO memberships (id, org_id, user_id, role) VALUES (?, ?, ?, ?)`
@@ -93,9 +93,9 @@ async function main() {
   console.log("Org: Demo COD Store");
   console.log("");
   console.log("LOCAL/DEV demo logins (never use in production):");
-  console.log("  Owner:      owner@codbooks.local / owner123");
-  console.log("  Accountant: accountant@codbooks.local / acct123");
-  console.log("  Ops:        ops@codbooks.local / ops123");
+  console.log("  Owner:      owner@codbooks.local / owner12345");
+  console.log("  Accountant: accountant@codbooks.local / acct12345");
+  console.log("  Ops:        ops@codbooks.local / ops12345");
   console.log("");
   console.log("Match summary:", summary);
   console.log("Run: npm run dev");

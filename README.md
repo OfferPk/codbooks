@@ -29,9 +29,9 @@ Open http://localhost:3000
 
 | Role | Email | Password |
 |------|-------|----------|
-| Owner | owner@codbooks.local | owner123 |
-| Accountant | accountant@codbooks.local | acct123 |
-| Ops | ops@codbooks.local | ops123 |
+| Owner | owner@codbooks.local | owner12345 |
+| Accountant | accountant@codbooks.local | acct12345 |
+| Ops | ops@codbooks.local | ops12345 |
 
 ## Scripts
 
@@ -53,6 +53,7 @@ Open http://localhost:3000
 | `/matches` | Match results table |
 | `/exports` | COD receivable + fee breakdown CSV |
 | `/audit` | Upload + match audit log |
+| `/team` | Invite ops / accountant (owner only) |
 
 ## Docs
 
@@ -60,6 +61,12 @@ Open http://localhost:3000
 - [COURIER_TEMPLATES.md](./COURIER_TEMPLATES.md) — TCS / PostEx column maps
 - [GUIDE-roman-urdu.md](./GUIDE-roman-urdu.md) — install + har feature (Roman Urdu)
 - [fixtures/](./fixtures/) — synthetic golden CSVs
+
+## Auth notes
+
+- Password minimum: **10** characters (register + team invite).
+- Soft in-memory rate limit on **login** and **register**: ≤10 failures per IP/email in 15 minutes → HTTP **429** with `Retry-After`. Single-node only (not shared across replicas).
+- Team roster + invite are **owner only** (API 403 + page redirect for ops/accountant).
 
 ## Security notes
 

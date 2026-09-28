@@ -54,3 +54,16 @@ All ship blockers from `QA-REPORT.md` and `SECURITY-REPORT.md` addressed.
 - `npm test` — 33/33 passed (7 files)
 - `npm run build` — (see STATUS.md)
 - No `git push` performed.
+
+---
+
+## Unreleased improve — 2026-09-28 (Asia/Karachi)
+
+Post dual-clear R2 hygiene + adoption gaps (inbox `IMPROVE-codbooks-20260928-1633.md`).
+
+1. **Auth hygiene** — `src/lib/rate-limit.ts`; login/register 429; password min 10; seed passwords ≥10; README auth notes.
+2. **Health checklist** — `HealthChecklist.tsx`; show when zero uploads or zero match runs; localStorage dismiss by user id.
+3. **Matches filters** — `q` + `courier` + `status` on `GET /api/matches`; UI chips/search; Health deep links.
+4. **Team invite** — owner-only `GET/POST /api/users`, `/team`, Nav gated; invite roles ops|accountant only.
+
+Release commit `92bd84f` not amended; no push.
