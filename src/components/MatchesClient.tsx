@@ -27,12 +27,7 @@ function pkr(paisa: number) {
 }
 
 const DEFAULT_COURIERS = ["tcs", "postex"];
-const CHASE_STATUSES = new Set([
-  "short",
-  "unpaid",
-  "unmatched",
-  "double_paid",
-]);
+const CHASE_STATUSES = new Set(["short", "unpaid", "unmatched", "double_paid"]);
 const AGING_LABELS: Record<string, string> = {
   "<7": "Under 7 days",
   "7-14": "7–14 days",
@@ -46,7 +41,7 @@ export function MatchesClient() {
   const [couriers, setCouriers] = useState<string[]>(DEFAULT_COURIERS);
   const [summary, setSummary] = useState("");
   const [qInput, setQInput] = useState(searchParams.get("q") || "");
-  const [role, setRole] = useState<string>("");
+  const [role, setRole] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editNotes, setEditNotes] = useState("");
   const [noteError, setNoteError] = useState("");
@@ -56,43 +51,35 @@ export function MatchesClient() {
   const courier = (searchParams.get("courier") || "").toLowerCase();
   const q = searchParams.get("q") || "";
   const aging = searchParams.get("aging") || "";
-
   const canEditNotes = role === "owner" || role === "ops";
 
   const courierChips = useMemo(() => {
-    const set = new Set([...DEFAULT_COURIERS, ...couriers]);
-    return Array.from(set).filter(Boolean);
+    const all = new Set([...DEFAULT_COURIERS, ...couriers]);
+    return Array.from(all).filter(Boolean);
   }, [couriers]);
 
-  function updateParams(next: {
-    status?: string;
-    courier?: string;
-    q?: string;
-    aging?: string;
-  }) {
-    const p = new URLSearchParams();
-    const st = next.status !== undefined ? next.status : status;
-    const co = next.courier !== undefined ? next.courier : courier;
-    const qq = next.q !== undefined ? next.q : q;
-    const ag = next.aging !== undefined ? next.aging : aging;
-    if (st) p.set("status", st);
-    if (co) p.set("courier", co);
-    if (qq) p.set("q", qq);
-    if (ag) p.set("aging", ag);
-    const qs = p.toString();
-    router.replace(qs ? `/matches?${qs}` : "/matches");
+  function updateParams(next: { status?: string; courier?: string; q?: string; aging?: string }) {
+    const params = new URLSearchParams();
+    const nextStatus = next.status !== undefined ? next.status : status;
+    const nextCourier = next.courier !== undefined ? next.courier : courier;
+    const nextQuery = next.q !== undefined ? next.q : q;
+    const nextAging = next.aging !== undefined ? next.aging : aging;
+    if (nextStatus) params.set("status", nextStatus);
+    if (nextCourier) params.set("courier", nextCourier);
+    if (nextQuery) params.set("q", nextQuery);
+    if (nextAging) params.set("aging", nextAging);
+    const query = params.toString();
+    router.replace(query ? `/matches?${query}` : "/matches");
   }
 
-  useEffect(() => {
-    setQInput(q);
-  }, [q]);
+  useEffect(() => setQInput(q), [q]);
 
   useEffect(() => {
     fetch("/api/auth/me")
-      .then(async (r) => {
-        if (!r.ok) return;
-        const d = await r.json();
-        setRole(d.user?.role || d.role || "");
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = await res.json();
+        setRole(data.user?.role || data.role || "");
       })
       .catch(() => {});
   }, []);
@@ -103,39 +90,33 @@ export function MatchesClient() {
     if (courier) params.set("courier", courier);
     if (q) params.set("q", q);
     if (aging) params.set("aging", aging);
-    const qs = params.toString();
-    fetch(`/api/matches${qs ? `?${qs}` : ""}`)
+    const query = params.toString();
+    fetch(`/api/matches${query ? `?${query}` : ""}`)
       .then(async (res) => {
         if (!res.ok) return;
         const data = await res.json();
         setMatches(data.matches || []);
-        if (Array.isArray(data.couriers) && data.couriers.length) {
-          setCouriers(data.couriers);
-        }
-        if (data.runs?.[0]) {
-          setSummary(data.runs[0].summary_json);
-        }
+        if (Array.isArray(data.couriers) && data.couriers.length) setCouriers(data.couriers);
+        if (data.runs?.[0]) setSummary(data.runs[0].summary_json);
       })
       .catch(() => {});
   }, [status, courier, q, aging]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => load(), [load]);
 
   function clearFilters() {
     setQInput("");
     router.replace("/matches");
   }
 
-  function submitSearch(e: FormEvent) {
-    e.preventDefault();
+  function submitSearch(event: FormEvent) {
+    event.preventDefault();
     updateParams({ q: qInput.trim() });
   }
 
-  function startEdit(m: MatchRow) {
-    setEditingId(m.id);
-    setEditNotes(m.notes || "");
+  function startEdit(match: MatchRow) {
+    setEditingId(match.id);
+    setEditNotes(match.notes || "");
     setNoteError("");
   }
 
@@ -154,208 +135,141 @@ export function MatchesClient() {
       return;
     }
     setEditingId(null);
-    setMatches((prev) =>
-      prev.map((m) =>
-        m.id === id ? { ...m, notes: data.match?.notes ?? editNotes } : m
-      )
-    );
+    setMatches((previous) => previous.map((match) =>
+      match.id === id ? { ...match, notes: data.match?.notes ?? editNotes } : match,
+    ));
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="space-y-7">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Match results</h1>
-          <p className="text-sm text-slate-500">
-            Latest match run — search AWB / CN / order / customer; filter
-            courier, status, aging. Annotate chase notes (owner/ops).
-          </p>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">Reconciliation · Review</p>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-950 sm:text-[2rem]">Match results</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Search settlement lines, narrow them by courier or status, and add follow-up notes where needed.</p>
         </div>
+        <span className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-600 shadow-sm">
+          {matches.length} {matches.length === 1 ? "line" : "lines"} shown
+        </span>
       </div>
 
-      <div className="card space-y-3">
-        <form onSubmit={submitSearch} className="flex flex-wrap gap-2">
+      <section className="card space-y-4">
+        <form onSubmit={submitSearch} className="flex flex-wrap gap-2.5">
+          <label className="sr-only" htmlFor="match-search">Search AWB, CN, order ID, or customer</label>
           <input
-            className="input min-w-[200px] flex-1"
-            placeholder="Search AWB, CN, order id, customer…"
+            id="match-search"
+            className="input min-w-[220px] flex-1"
+            placeholder="Search AWB, CN, order ID, customer…"
             value={qInput}
-            onChange={(e) => setQInput(e.target.value)}
+            onChange={(event) => setQInput(event.target.value)}
           />
-          <button type="submit" className="btn-primary">
-            Search
-          </button>
-          <button type="button" className="btn-secondary" onClick={clearFilters}>
-            Clear
-          </button>
+          <button type="submit" className="btn-primary">Search</button>
+          <button type="button" className="btn-secondary" onClick={clearFilters}>Clear</button>
         </form>
+
         {aging && (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-900">
-              Aging: {AGING_LABELS[aging] || aging} (unpaid + short)
-            </span>
-            <button
-              type="button"
-              className="text-xs text-sky-700 hover:underline"
-              onClick={() => updateParams({ aging: "" })}
-            >
-              Clear aging
-            </button>
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+            <span className="text-xs font-semibold text-amber-900">Aging: {AGING_LABELS[aging] || aging} <span className="font-normal">(unpaid + short)</span></span>
+            <button type="button" className="ml-auto text-xs font-semibold text-amber-900 underline decoration-amber-400 underline-offset-2" onClick={() => updateParams({ aging: "" })}>Remove filter</button>
           </div>
         )}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium uppercase text-slate-500">
-            Courier
-          </span>
+
+        <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
+          <span className="mr-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Courier</span>
           <button
             type="button"
-            className={`rounded-full px-3 py-1 text-xs ${
-              !courier
-                ? "bg-sky-100 font-medium text-sky-800"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
+            aria-pressed={!courier}
+            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${!courier ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
             onClick={() => updateParams({ courier: "" })}
-          >
-            All
-          </button>
-          {courierChips.map((code) => (
-            <button
-              key={code}
-              type="button"
-              className={`rounded-full px-3 py-1 text-xs uppercase ${
-                courier === code
-                  ? "bg-sky-100 font-medium text-sky-800"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-              onClick={() =>
-                updateParams({ courier: courier === code ? "" : code })
-              }
-            >
-              {code}
-            </button>
-          ))}
-          <select
-            className="input ml-auto w-auto"
-            value={status}
-            onChange={(e) => updateParams({ status: e.target.value })}
-          >
+          >All</button>
+          {courierChips.map((code) => {
+            const active = courier === code;
+            return (
+              <button
+                key={code}
+                type="button"
+                aria-pressed={active}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold uppercase transition ${active ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                onClick={() => updateParams({ courier: active ? "" : code })}
+              >{code}</button>
+            );
+          })}
+          <label className="sr-only" htmlFor="status-filter">Filter by match status</label>
+          <select id="status-filter" className="input ml-auto w-auto min-w-[170px]" value={status} onChange={(event) => updateParams({ status: event.target.value })}>
             <option value="">All statuses</option>
-            <option value="matched">matched</option>
-            <option value="short">short</option>
-            <option value="unpaid">unpaid</option>
-            <option value="unmatched">unmatched</option>
-            <option value="double_paid">double_paid</option>
+            <option value="matched">Matched</option>
+            <option value="short">Short</option>
+            <option value="unpaid">Unpaid</option>
+            <option value="unmatched">Unmatched</option>
+            <option value="double_paid">Double-paid</option>
           </select>
         </div>
-      </div>
+      </section>
 
       {summary && (
-        <p className="text-sm text-slate-600">
-          Last run summary: <code className="text-xs">{summary}</code>
+        <p className="rounded-xl border border-slate-200 bg-white/80 px-4 py-3 text-xs leading-5 text-slate-600">
+          <span className="font-semibold text-slate-800">Latest run summary</span>
+          <code className="ml-2 break-all font-mono text-[11px]">{summary}</code>
         </p>
       )}
+      {noteError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{noteError}</p>}
 
-      {noteError && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-          {noteError}
-        </p>
-      )}
-
-      <div className="card overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="text-xs uppercase text-slate-500">
-            <tr>
-              <th className="py-2">Status</th>
-              <th>Courier</th>
-              <th>Order</th>
-              <th>AWB / CN</th>
-              <th>Expected</th>
-              <th>Remitted</th>
-              <th>Short</th>
-              <th>Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {matches.length === 0 && (
+      <section className="card !p-2 sm:!p-3">
+        <div className="overflow-x-auto">
+          <table className="data-table min-w-[1100px]">
+            <thead>
               <tr>
-                <td colSpan={8} className="py-6 text-slate-400">
-                  No matches for this filter — upload fixtures and run match, or
-                  clear filters.
-                </td>
+                <th>Status</th><th>Courier</th><th>Order</th><th>AWB / CN</th><th>Expected</th><th>Remitted</th><th>Short</th><th>Follow-up notes</th>
               </tr>
-            )}
-            {matches.map((m) => {
-              const editable =
-                canEditNotes &&
-                (CHASE_STATUSES.has(m.status) || m.status === "matched");
-              return (
-                <tr key={m.id} className="border-t border-slate-100 align-top">
-                  <td className="py-2">
-                    <StatusBadge status={m.status} />
-                  </td>
-                  <td className="uppercase">{m.courier_code || "—"}</td>
-                  <td>
-                    <div>{m.external_order_id || "—"}</div>
-                    <div className="text-xs text-slate-500">
-                      {m.customer_name}
-                    </div>
-                  </td>
-                  <td className="font-mono text-xs">{m.awb || m.cn || "—"}</td>
-                  <td>{pkr(m.expected_paisa)}</td>
-                  <td>{pkr(m.remitted_paisa < 0 ? 0 : m.remitted_paisa)}</td>
-                  <td>{pkr(m.short_paisa)}</td>
-                  <td className="min-w-[140px]">
-                    {editingId === m.id ? (
-                      <div className="space-y-1">
-                        <textarea
-                          className="input text-xs"
-                          rows={2}
-                          maxLength={500}
-                          value={editNotes}
-                          onChange={(e) => setEditNotes(e.target.value)}
-                        />
-                        <div className="flex gap-1">
-                          <button
-                            type="button"
-                            className="btn-primary !px-2 !py-0.5 text-xs"
-                            disabled={noteBusy}
-                            onClick={() => saveNotes(m.id)}
-                          >
-                            Save
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-secondary !px-2 !py-0.5 text-xs"
-                            onClick={() => setEditingId(null)}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-1">
-                        <p className="whitespace-pre-wrap text-xs text-slate-700">
-                          {m.notes || (
-                            <span className="text-slate-400">—</span>
-                          )}
-                        </p>
-                        {editable && (
-                          <button
-                            type="button"
-                            className="text-xs text-sky-700 hover:underline"
-                            onClick={() => startEdit(m)}
-                          >
-                            Edit
-                          </button>
-                        )}
-                      </div>
-                    )}
+            </thead>
+            <tbody>
+              {matches.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="!py-12 text-center">
+                    <span className="mx-auto grid h-11 w-11 place-items-center rounded-2xl bg-slate-100 text-lg text-slate-500" aria-hidden="true">⌕</span>
+                    <p className="mt-3 font-semibold text-slate-700">No match lines found</p>
+                    <p className="mt-1 text-xs text-slate-500">Upload settlement files or clear filters to see more results.</p>
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              )}
+              {matches.map((match) => {
+                const editable = canEditNotes && (CHASE_STATUSES.has(match.status) || match.status === "matched");
+                return (
+                  <tr key={match.id}>
+                    <td><StatusBadge status={match.status} /></td>
+                    <td className="font-semibold uppercase text-slate-700">{match.courier_code || "—"}</td>
+                    <td>
+                      <span className="font-semibold text-slate-800">{match.external_order_id || "—"}</span>
+                      {match.customer_name && <span className="mt-1 block text-xs text-slate-500">{match.customer_name}</span>}
+                    </td>
+                    <td className="font-mono text-xs text-slate-600">{match.awb || match.cn || "—"}</td>
+                    <td className="numeric font-medium">{pkr(match.expected_paisa)}</td>
+                    <td className="numeric">{pkr(match.remitted_paisa < 0 ? 0 : match.remitted_paisa)}</td>
+                    <td className="numeric font-semibold text-rose-700">{pkr(match.short_paisa)}</td>
+                    <td className="min-w-[180px]">
+                      {editingId === match.id ? (
+                        <div className="space-y-2">
+                          <label className="sr-only" htmlFor={`note-${match.id}`}>Follow-up note</label>
+                          <textarea id={`note-${match.id}`} className="input min-w-[170px] text-xs" rows={2} maxLength={500} value={editNotes} onChange={(event) => setEditNotes(event.target.value)} />
+                          <div className="flex gap-1.5">
+                            <button type="button" className="btn-primary !px-2.5 !py-1.5 text-xs" disabled={noteBusy} onClick={() => saveNotes(match.id)}>{noteBusy ? "Saving…" : "Save note"}</button>
+                            <button type="button" className="btn-secondary !px-2.5 !py-1.5 text-xs" onClick={() => setEditingId(null)}>Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <p className="whitespace-pre-wrap text-xs leading-5 text-slate-600">{match.notes || <span className="text-slate-400">No note added</span>}</p>
+                          {editable && <button type="button" className="text-xs font-semibold text-emerald-700 hover:underline" onClick={() => startEdit(match)}>Edit note</button>}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }
