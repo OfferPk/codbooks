@@ -9,10 +9,19 @@ export default async function AppLayout({
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
+
   return (
     <div className="min-h-dvh">
+      <a href="#main-content" className="skip-link">
+        Skip to content
+      </a>
       <Nav userName={user.name} orgName={user.org_name} role={user.role} />
-      <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+      <main
+        id="main-content"
+        className="mx-auto w-full max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8"
+      >
+        {children}
+      </main>
     </div>
   );
 }
