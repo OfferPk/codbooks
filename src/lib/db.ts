@@ -369,7 +369,25 @@ export function getCourierIdByCode(code: string): string | null {
   const row = db
     .prepare("SELECT id FROM couriers WHERE code = ?")
     .get(code) as { id: string } | undefined;
-  return row?.id ?? null;
+  if (row) return row.id;
+
+  const KNOWN_COURIERS: Record<string, string> = {
+    tcs: "TCS",
+    postex: "PostEx",
+    leopards: "Leopards Courier",
+    mnp: "M&P Express",
+    trax: "Trax Logistics",
+    callcourier: "Call Courier",
+  };
+  const c = code.toLowerCase().trim();
+  if (KNOWN_COURIERS[c]) {
+    const id = `courier_${c}`;
+    db.prepare(
+      "INSERT OR IGNORE INTO couriers (id, code, name) VALUES (?, ?, ?)"
+    ).run(id, c, KNOWN_COURIERS[c]);
+    return id;
+  }
+  return null;
 }
 
 export function audit(
