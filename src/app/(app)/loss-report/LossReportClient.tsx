@@ -5,7 +5,10 @@ import type {
   LossCategory,
   LossReportSummary,
 } from "@/lib/loss-report";
-import type { ComplaintDraft } from "@/lib/loss-complaint";
+import {
+  buildWhatsAppShareUrl,
+  type ComplaintDraft,
+} from "@/lib/loss-complaint";
 
 function formatMoney(amount: number) {
   return `PKR ${amount.toLocaleString("en-PK", {
@@ -190,8 +193,35 @@ export function LossReportClient() {
 
   return (
     <div className="space-y-6">
+      {/* Printable Letterhead (visible only in print/PDF mode) */}
+      <div className="hidden print:block mb-6 border-b-2 border-slate-900 pb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold uppercase tracking-wider text-slate-900">
+              COD Dispute &amp; Loss Reconciliation Summary
+            </h1>
+            <p className="text-xs text-slate-600">
+              CodBooks Automated Courier Audit &amp; Settlement Discrepancy Ledger
+            </p>
+          </div>
+          <div className="text-right text-xs text-slate-600">
+            <div><strong>Generated:</strong> {new Date().toLocaleDateString("en-PK")}</div>
+            <div><strong>As of:</strong> {data.as_of ? new Date(data.as_of).toLocaleDateString("en-PK") : "Today"}</div>
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-4 rounded border border-slate-300 p-2.5 text-xs bg-slate-50">
+          <div>
+            <div><strong>Total Disputed Amount:</strong> <span className="text-red-700 font-bold">{formatMoney(data.total_loss_pkr)}</span></div>
+            <div><strong>Affected Shipments:</strong> {data.total_issues} parcels</div>
+          </div>
+          <div className="text-right">
+            <div><strong>Dispute Scope:</strong> Short Remittances, Duplicate Fees, Return Discrepancies, Held COD</div>
+          </div>
+        </div>
+      </div>
+
       {/* Page Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between print:hidden">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
             Loss Report &amp; Courier Disputes
@@ -200,7 +230,15 @@ export function LossReportClient() {
             Audit short payments, double-charged fees, fake return discrepancies, and overdue COD with ready-to-send dispute drafts.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 print:hidden">
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="btn btn-secondary inline-flex items-center gap-1.5 text-xs font-semibold"
+            title="Print or Save as PDF Summary"
+          >
+            🖨️ Print / PDF
+          </button>
           <a
             href={exportUrl}
             download
@@ -350,7 +388,7 @@ export function LossReportClient() {
                   </div>
                 </div>
 
-                <div className="mt-3 pt-2 border-t border-slate-200">
+                <div className="mt-3 pt-2 border-t border-slate-200 print:hidden">
                   <button
                     type="button"
                     onClick={() => openComplaintModal(c.courier_code)}
@@ -366,7 +404,7 @@ export function LossReportClient() {
       )}
 
       {/* Filter and Search Bar */}
-      <div className="card space-y-4">
+      <div className="card space-y-4 print:hidden">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium text-slate-500">Category:</span>
@@ -535,7 +573,7 @@ export function LossReportClient() {
 
       {/* Complaint Generator Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs print:hidden">
           <div className="card max-h-[90vh] w-full max-w-3xl overflow-hidden p-0 shadow-2xl flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 bg-slate-50">
@@ -628,7 +666,7 @@ export function LossReportClient() {
                 </div>
               ) : complaintDraft ? (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between text-xs text-slate-600">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
                     <span>
                       Claim Total:{" "}
                       <strong className="text-red-700 font-bold">
@@ -636,20 +674,57 @@ export function LossReportClient() {
                       </strong>{" "}
                       across {complaintDraft.affected_order_count} shipment(s)
                     </span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        copyToClipboard(
-                          activeTab === "email"
-                            ? complaintDraft.body
-                            : complaintDraft.whatsapp_text,
-                          activeTab === "email" ? "Email Draft" : "WhatsApp Draft"
-                        )
-                      }
-                      className="btn btn-secondary text-xs py-1"
-                    >
-                      📋 Copy {activeTab === "email" ? "Email" : "WhatsApp"} Text
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {activeTab === "whatsapp" ? (
+                        <>
+                          <a
+                            href={buildWhatsAppShareUrl(complaintDraft.whatsapp_text)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn-primary text-xs py-1 inline-flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+                            title="Open WhatsApp Web or Mobile"
+                          >
+                            📲 Send to WhatsApp
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              copyToClipboard(
+                                complaintDraft.whatsapp_text,
+                                "WhatsApp Draft"
+                              )
+                            }
+                            className="btn btn-secondary text-xs py-1"
+                          >
+                            📋 Copy Text
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <a
+                            href={`mailto:?subject=${encodeURIComponent(
+                              complaintDraft.subject
+                            )}&body=${encodeURIComponent(complaintDraft.body)}`}
+                            className="btn btn-secondary text-xs py-1 inline-flex items-center gap-1"
+                            title="Open default email client"
+                          >
+                            📧 Open Mail
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              copyToClipboard(
+                                complaintDraft.body,
+                                "Email Draft"
+                              )
+                            }
+                            className="btn btn-secondary text-xs py-1"
+                          >
+                            📋 Copy Email
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
 
                   {copyFeedback && (
@@ -704,6 +779,27 @@ export function LossReportClient() {
           </div>
         </div>
       )}
+
+      {/* Printable Sign-off & Declaration (visible only in print/PDF mode) */}
+      <div className="hidden print:block mt-8 pt-6 border-t-2 border-slate-300 text-xs text-slate-700">
+        <div className="grid grid-cols-2 gap-12">
+          <div>
+            <p className="font-semibold text-slate-900">Submitted by Merchant:</p>
+            <div className="mt-10 border-t border-slate-400 pt-1 text-[11px] text-slate-500">
+              Authorized Signature &amp; Date
+            </div>
+          </div>
+          <div>
+            <p className="font-semibold text-slate-900">Acknowledged by Courier Representative:</p>
+            <div className="mt-10 border-t border-slate-400 pt-1 text-[11px] text-slate-500">
+              Courier Desk Signature &amp; Stamp
+            </div>
+          </div>
+        </div>
+        <p className="mt-6 text-center text-[10px] text-slate-400">
+          Generated via CodBooks COD Reconciliation Platform · Confidential · For Official Dispute Resolution Only
+        </p>
+      </div>
     </div>
   );
 }

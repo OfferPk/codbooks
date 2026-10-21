@@ -11,7 +11,11 @@ import {
   type OrderInput,
   type SettlementInput,
 } from "@/lib/loss-report";
-import { buildCourierComplaint } from "@/lib/loss-complaint";
+import {
+  buildCourierComplaint,
+  buildWhatsAppShareUrl,
+  getPrintableDisputeSummary,
+} from "@/lib/loss-complaint";
 
 describe("Loss Report - Detection Rules", () => {
   describe("Rule 1: detectShortPayments", () => {
@@ -525,6 +529,51 @@ describe("Loss Report - Detection Rules", () => {
       expect(draft.whatsapp_text).toContain("*Affected Shipments: 2*");
       expect(draft.whatsapp_text).toContain("779400000101");
     });
+
+    it("generates WhatsApp dispatch link with optional phone number", () => {
+      const urlWithoutPhone = buildWhatsAppShareUrl("Test message");
+      expect(urlWithoutPhone).toBe("https://api.whatsapp.com/send?text=Test%20message");
+
+      const urlWithPhone = buildWhatsAppShareUrl("Test message", "+92-300-1234567");
+      expect(urlWithPhone).toBe("https://api.whatsapp.com/send?phone=923001234567&text=Test%20message");
+    });
+
+    it("compiles structured printable dispute summary for PDF printout", () => {
+      const report = compileLossReport([
+        {
+          id: "item1",
+          category: "short_payment",
+          courier_code: "tcs",
+          courier_name: "TCS",
+          order_id: "o1",
+          external_order_id: "ORD-001",
+          awb: "AWB-001",
+          cn: null,
+          customer_name: "Ali",
+          expected_paisa: 100000,
+          remitted_paisa: 80000,
+          loss_paisa: 20000,
+          loss_pkr: 200,
+          reference_date: "2026-09-01",
+          days_held: null,
+          held_bucket: null,
+          reason: "Short remittance",
+        },
+      ]);
+
+      const printable = getPrintableDisputeSummary(report, {
+        merchant_name: "Apex Retail",
+        contact_person: "Zaid Khan",
+      });
+
+      expect(printable.title).toContain("COD DISPUTE & LOSS RECONCILIATION SUMMARY");
+      expect(printable.merchant_name).toBe("Apex Retail");
+      expect(printable.contact_person).toBe("Zaid Khan");
+      expect(printable.total_issues).toBe(1);
+      expect(printable.total_loss_pkr).toBe(200);
+      expect(printable.category_totals).toHaveLength(4);
+      expect(printable.courier_breakdown[0].code).toBe("tcs");
+    });
   });
 
   describe("Database Integration: getLossReport", () => {
@@ -595,6 +644,111 @@ describe("Loss Report - Detection Rules", () => {
       for (const s of ["", "-wal", "-shm"]) {
         try {
           fs.unlinkSync(dbFile + s);
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+
+    it("enforces multi-shop isolation when shopId is provided", async () => {
+      const fs = await import("fs");
+      const path = await import("path");
+      const os = await import("os");
+      const { closeDb, getDb } = await import("@/lib/db");
+      const { createShop } = await import("@/lib/shops");
+      const { getLossReport } = await import("@/lib/loss-report");
+
+      closeDb();
+      const testDbFile = path.join(
+        os.tmpdir(),
+        `codbooks-loss-shop-test-${Date.now()}-${Math.random()}.db`
+      );
+      process.env.DATABASE_PATH = testDbFile;
+      const db = getDb();
+      const testOrgId = crypto.randomUUID();
+      const now = new Date().toISOString();
+
+      db.prepare(
+        `INSERT INTO orgs (id, name, type, created_at) VALUES (?, 'Multi-Shop Store', 'seller', ?)`
+      ).run(testOrgId, now);
+
+      const testUserId = crypto.randomUUID();
+      db.prepare(
+        `INSERT INTO users (id, email, password_hash, name, created_at) VALUES (?, 'multishop@test.local', 'hash', 'Multi Owner', ?)`
+      ).run(testUserId, now);
+
+      const shop1 = createShop(testOrgId, "Lahore Branch", "LHE", true);
+      const shop2 = createShop(testOrgId, "Karachi Branch", "KHI", false);
+
+      const courierRow = db
+        .prepare("SELECT id FROM couriers WHERE code = 'tcs'")
+        .get() as { id: string } | undefined;
+      const courierId = courierRow
+        ? courierRow.id
+        : (() => {
+            const id = crypto.randomUUID();
+            db.prepare(
+              "INSERT INTO couriers (id, code, name) VALUES (?, 'tcs', 'TCS')"
+            ).run(id);
+            return id;
+          })();
+
+      // Create a match run for each shop
+      const run1Id = crypto.randomUUID();
+      db.prepare(
+        `INSERT INTO match_runs (id, org_id, shop_id, created_by, summary_json, created_at) VALUES (?, ?, ?, ?, '{}', ?)`
+      ).run(run1Id, testOrgId, shop1.id, testUserId, now);
+
+      const run2Id = crypto.randomUUID();
+      db.prepare(
+        `INSERT INTO match_runs (id, org_id, shop_id, created_by, summary_json, created_at) VALUES (?, ?, ?, ?, '{}', ?)`
+      ).run(run2Id, testOrgId, shop2.id, testUserId, now);
+
+      // Disputed order in Shop 1: short by 500 PKR
+      const o1Id = crypto.randomUUID();
+      db.prepare(
+        `INSERT INTO orders (id, org_id, shop_id, external_order_id, awb, customer_name, order_amount_paisa, created_at)
+         VALUES (?, ?, ?, 'ORD-SHOP1-1', 'AWB-SHOP1', 'Customer 1', 200000, ?)`
+      ).run(o1Id, testOrgId, shop1.id, now);
+
+      db.prepare(
+        `INSERT INTO matches (id, org_id, shop_id, match_run_id, order_id, courier_id, status, expected_paisa, remitted_paisa, short_paisa, awb, reference_date)
+         VALUES (?, ?, ?, ?, ?, ?, 'short', 200000, 150000, 50000, 'AWB-SHOP1', ?)`
+      ).run(crypto.randomUUID(), testOrgId, shop1.id, run1Id, o1Id, courierId, now);
+
+      // Disputed order in Shop 2: short by 800 PKR
+      const o2Id = crypto.randomUUID();
+      db.prepare(
+        `INSERT INTO orders (id, org_id, shop_id, external_order_id, awb, customer_name, order_amount_paisa, created_at)
+         VALUES (?, ?, ?, 'ORD-SHOP2-1', 'AWB-SHOP2', 'Customer 2', 300000, ?)`
+      ).run(o2Id, testOrgId, shop2.id, now);
+
+      db.prepare(
+        `INSERT INTO matches (id, org_id, shop_id, match_run_id, order_id, courier_id, status, expected_paisa, remitted_paisa, short_paisa, awb, reference_date)
+         VALUES (?, ?, ?, ?, ?, ?, 'short', 300000, 220000, 80000, 'AWB-SHOP2', ?)`
+      ).run(crypto.randomUUID(), testOrgId, shop2.id, run2Id, o2Id, courierId, now);
+
+      // Query scoped to Shop 1
+      const reportShop1 = getLossReport(testOrgId, new Date(), shop1.id);
+      expect(reportShop1.total_issues).toBe(1);
+      expect(reportShop1.total_loss_pkr).toBe(500);
+      expect(reportShop1.items[0].external_order_id).toBe("ORD-SHOP1-1");
+
+      // Query scoped to Shop 2
+      const reportShop2 = getLossReport(testOrgId, new Date(), shop2.id);
+      expect(reportShop2.total_issues).toBe(1);
+      expect(reportShop2.total_loss_pkr).toBe(800);
+      expect(reportShop2.items[0].external_order_id).toBe("ORD-SHOP2-1");
+
+      // Query across all shops (org-level)
+      const reportAll = getLossReport(testOrgId, new Date(), null);
+      expect(reportAll.total_issues).toBe(2);
+      expect(reportAll.total_loss_pkr).toBe(1300);
+
+      closeDb();
+      for (const s of ["", "-wal", "-shm"]) {
+        try {
+          fs.unlinkSync(testDbFile + s);
         } catch {
           /* ignore */
         }

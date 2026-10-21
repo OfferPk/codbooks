@@ -539,8 +539,12 @@ export function compileLossReport(
   };
 }
 
-/** Generate Loss Report from SQLite Database */
-export function getLossReport(orgId: string, asOfDate: Date = new Date()): LossReportSummary {
+/** Generate Loss Report from SQLite Database with optional shop-level isolation */
+export function getLossReport(
+  orgId: string,
+  asOfDate: Date = new Date(),
+  shopId?: string | null
+): LossReportSummary {
   const db = getDb();
 
   // Load couriers map
@@ -552,41 +556,78 @@ export function getLossReport(orgId: string, asOfDate: Date = new Date()): LossR
     courierMap.set(c.id, { code: c.code, name: c.name });
   }
 
-  // Load latest match run
-  const latestRun = db
-    .prepare(
-      `SELECT id FROM match_runs WHERE org_id = ? ORDER BY created_at DESC LIMIT 1`
-    )
-    .get(orgId) as { id: string } | undefined;
+  let matches: MatchInput[] = [];
+  if (shopId) {
+    const latestRun = db
+      .prepare(
+        `SELECT id FROM match_runs WHERE org_id = ? AND shop_id = ? ORDER BY created_at DESC LIMIT 1`
+      )
+      .get(orgId, shopId) as { id: string } | undefined;
 
-  const matches: MatchInput[] = latestRun
-    ? (db
+    if (latestRun) {
+      matches = db
         .prepare(
           `SELECT m.*, c.code as courier_code, c.name as courier_name
            FROM matches m
            LEFT JOIN couriers c ON c.id = m.courier_id
-           WHERE m.org_id = ? AND m.match_run_id = ?`
+           WHERE m.org_id = ? AND m.match_run_id = ? AND m.shop_id = ?`
         )
-        .all(orgId, latestRun.id) as MatchInput[])
-    : [];
+        .all(orgId, latestRun.id, shopId) as MatchInput[];
+    }
+  } else {
+    // Org-level: select matches from the latest match run of each shop
+    matches = db
+      .prepare(
+        `SELECT m.*, c.code as courier_code, c.name as courier_name
+         FROM matches m
+         LEFT JOIN couriers c ON c.id = m.courier_id
+         WHERE m.org_id = ?
+           AND m.match_run_id IN (
+             SELECT id FROM (
+               SELECT id, row_number() OVER (PARTITION BY COALESCE(shop_id, '') ORDER BY created_at DESC) as rn
+               FROM match_runs
+               WHERE org_id = ?
+             ) WHERE rn = 1
+           )`
+      )
+      .all(orgId, orgId) as MatchInput[];
+  }
 
-  const orders = db
-    .prepare(
-      `SELECT o.*, c.code as courier_code, c.name as courier_name
-       FROM orders o
-       LEFT JOIN couriers c ON c.id = o.courier_id
-       WHERE o.org_id = ?`
-    )
-    .all(orgId) as OrderInput[];
+  const orders = shopId
+    ? (db
+        .prepare(
+          `SELECT o.*, c.code as courier_code, c.name as courier_name
+           FROM orders o
+           LEFT JOIN couriers c ON c.id = o.courier_id
+           WHERE o.org_id = ? AND o.shop_id = ?`
+        )
+        .all(orgId, shopId) as OrderInput[])
+    : (db
+        .prepare(
+          `SELECT o.*, c.code as courier_code, c.name as courier_name
+           FROM orders o
+           LEFT JOIN couriers c ON c.id = o.courier_id
+           WHERE o.org_id = ?`
+        )
+        .all(orgId) as OrderInput[]);
 
-  const settlements = db
-    .prepare(
-      `SELECT s.*, c.code as courier_code, c.name as courier_name
-       FROM settlement_lines s
-       LEFT JOIN couriers c ON c.id = s.courier_id
-       WHERE s.org_id = ?`
-    )
-    .all(orgId) as SettlementInput[];
+  const settlements = shopId
+    ? (db
+        .prepare(
+          `SELECT s.*, c.code as courier_code, c.name as courier_name
+           FROM settlement_lines s
+           LEFT JOIN couriers c ON c.id = s.courier_id
+           WHERE s.org_id = ? AND s.shop_id = ?`
+        )
+        .all(orgId, shopId) as SettlementInput[])
+    : (db
+        .prepare(
+          `SELECT s.*, c.code as courier_code, c.name as courier_name
+           FROM settlement_lines s
+           LEFT JOIN couriers c ON c.id = s.courier_id
+           WHERE s.org_id = ?`
+        )
+        .all(orgId) as SettlementInput[]);
 
   // Fill in courier code/name if missing
   for (const m of matches) {
