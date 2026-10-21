@@ -18,7 +18,15 @@ export async function GET(req: NextRequest) {
   const courierFilter = searchParams.get("courier")?.toLowerCase();
   const categoryFilter = searchParams.get("category") as LossCategory | "all" | null;
 
-  const report = getLossReport(user.org_id, asOf);
+  // Multi-shop scoping: staff is strictly bound to session shop_id; owners/admins can filter by query or use active shop
+  let targetShopId: string | null = null;
+  if (user.role === "staff") {
+    targetShopId = user.shop_id || null;
+  } else {
+    targetShopId = searchParams.get("shopId") || user.shop_id || null;
+  }
+
+  const report = getLossReport(user.org_id, asOf, targetShopId);
 
   let items = report.items;
   if (courierFilter) {

@@ -188,3 +188,88 @@ ${contactPhone ? `📞 ${contactPhone}` : ""}`;
     awb_list: awbList,
   };
 }
+
+/**
+ * Builds a direct web/mobile WhatsApp dispatch link (wa.me / api.whatsapp.com)
+ */
+export function buildWhatsAppShareUrl(
+  whatsappText: string,
+  phoneNumber?: string
+): string {
+  const cleanPhone = phoneNumber ? phoneNumber.replace(/\D/g, "") : "";
+  const encodedText = encodeURIComponent(whatsappText);
+  if (cleanPhone) {
+    return `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}`;
+  }
+  return `https://api.whatsapp.com/send?text=${encodedText}`;
+}
+
+export interface PrintableDisputeSummary {
+  title: string;
+  merchant_name: string;
+  contact_person: string;
+  generated_at: string;
+  as_of: string;
+  total_loss_pkr: number;
+  total_loss_formatted: string;
+  total_issues: number;
+  category_totals: Array<{
+    category: LossCategory;
+    name: string;
+    count: number;
+    amount_pkr: number;
+    amount_formatted: string;
+  }>;
+  courier_breakdown: Array<{
+    code: string;
+    name: string;
+    total_issues: number;
+    total_loss_pkr: number;
+    total_loss_formatted: string;
+  }>;
+}
+
+/**
+ * Compiles a structured printable dispute summary dataset for PDF printout
+ */
+export function getPrintableDisputeSummary(
+  report: LossReportSummary,
+  options?: { merchant_name?: string; contact_person?: string }
+): PrintableDisputeSummary {
+  const merchantName = options?.merchant_name || "Merchant Store";
+  const contactPerson = options?.contact_person || merchantName;
+
+  const categoryTotals = (
+    Object.keys(report.by_category) as LossCategory[]
+  ).map((cat) => {
+    const data = report.by_category[cat];
+    return {
+      category: cat,
+      name: CATEGORY_NAMES[cat] || cat,
+      count: data.count,
+      amount_pkr: data.loss_pkr,
+      amount_formatted: formatPkr(data.loss_paisa),
+    };
+  });
+
+  const courierBreakdown = Object.values(report.by_courier).map((c) => ({
+    code: c.courier_code,
+    name: c.courier_name,
+    total_issues: c.total_issues,
+    total_loss_pkr: c.total_loss_pkr,
+    total_loss_formatted: formatPkr(c.total_loss_paisa),
+  }));
+
+  return {
+    title: "COD DISPUTE & LOSS RECONCILIATION SUMMARY",
+    merchant_name: merchantName,
+    contact_person: contactPerson,
+    generated_at: new Date().toISOString(),
+    as_of: report.as_of,
+    total_loss_pkr: report.total_loss_pkr,
+    total_loss_formatted: formatPkr(report.total_loss_paisa),
+    total_issues: report.total_issues,
+    category_totals: categoryTotals,
+    courier_breakdown: courierBreakdown,
+  };
+}
