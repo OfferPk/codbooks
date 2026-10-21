@@ -1,0 +1,6 @@
+# M&P Express Logistics COD Reimbursement Sample (Anonymized)
+CN Number,Order Ref,Consignee,Destination,COD Value,Delivery Charges,FED,WHT,Net COD,Status,Payment Date,Voucher No
+2000881901,ORD-MNP-201,Usman Ali,Faisalabad,4200,190,30.40,0,3979.60,Delivered,2026-10-14,MNP-VCH-88201
+2000881902,ORD-MNP-202,Sara Sheikh,Multan,1500,140,22.40,0,1337.60,Delivered,2026-10-14,MNP-VCH-88201
+2000881903,ORD-MNP-203,Hamza Raza,Peshawar,3100,170,27.20,0,0,RTO,2026-10-14,MNP-VCH-88201
+2000881904,ORD-MNP-204,Maryam Noor,Sialkot,2850,160,25.60,0,2664.40,Delivered & Settled,2026-10-14,MNP-VCH-88201

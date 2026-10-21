@@ -1,0 +1,6 @@
+# Leopards Courier COD Settlement Sample (Anonymized)
+Track Number,Order ID,Customer Name,Consignee City,Delivery Date,Status,COD Amount,Delivery Charges,GST,Net Amount,Payment Date,Sheet Number
+LE7020000001,ORD-LEO-101,Ahmad Khan,Karachi,2026-10-10,Delivered,3500,180,28.80,3291.20,2026-10-15,LEO-ST-99101
+LE7020000002,ORD-LEO-102,Fatima Bibi,Lahore,2026-10-11,Delivered,2200,150,24.00,2026.00,2026-10-15,LEO-ST-99101
+LE7020000003,ORD-LEO-103,Zahid Iqbal,Islamabad,2026-10-12,Return to Origin,1800,150,24.00,0,2026-10-15,LEO-ST-99101
+LE7020000004,ORD-LEO-104,Bilal Tariq,Rawalpindi,2026-10-12,Delivered,4950,220,35.20,4694.80,2026-10-15,LEO-ST-99101

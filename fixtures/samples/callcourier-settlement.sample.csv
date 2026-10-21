@@ -1,0 +1,6 @@
+# Call Courier COD Reimbursement Sample (Anonymized)
+CN Number,Ref No,Consignee Name,Destination,COD Amount,Service Charges,Tax,Bank Charges,Balance,Status,Date,Sheet No
+CC654001,ORD-CC-401,Noman Butt,Sargodha,3200,160,25.60,20,2994.40,Delivered,2026-10-18,CC-ST-55401
+CC654002,ORD-CC-402,Zainab Akram,Gujrat,1750,140,22.40,15,1572.60,Delivered,2026-10-18,CC-ST-55401
+CC654003,ORD-CC-403,Tariq Jameel,Kasur,2600,150,24.00,0,0,Return,2026-10-18,CC-ST-55401
+CC654004,ORD-CC-404,Sadia Parveen,Sheikhupura,4100,180,28.80,25,3866.20,Delivered,2026-10-18,CC-ST-55401

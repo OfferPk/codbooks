@@ -1,0 +1,6 @@
+# Trax Logistics COD Disbursement Sample (Anonymized)
+Tracking Number,Order Number,Customer Name,Destination City,Product Amount,Service Charges,Cash Handling Fee,Sales Tax,Amount Paid,Current Status,Disbursement Date,Disbursement ID
+TRX8910001,ORD-TRX-301,Kashif Mahmood,Gujranwala,5600,210,50,33.60,5306.40,Delivered,2026-10-16,TRX-DISB-77301
+TRX8910002,ORD-TRX-302,Ayesha Siddiqa,Bahawalpur,1950,150,30,24.00,1746.00,Delivered,2026-10-16,TRX-DISB-77301
+TRX8910003,ORD-TRX-303,Omer Farooq,Quetta,2400,250,40,40.00,0,Returned to Shipper,2026-10-16,TRX-DISB-77301
+TRX8910004,ORD-TRX-304,Hina Malik,Sukkur,3800,190,40,30.40,3539.60,Delivered,2026-10-16,TRX-DISB-77301

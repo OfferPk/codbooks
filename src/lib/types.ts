@@ -8,7 +8,13 @@ export type MatchStatus =
   | "unpaid"
   | "unmatched"
   | "double_paid";
-export type CourierCode = "tcs" | "postex";
+export type CourierCode =
+  | "tcs"
+  | "postex"
+  | "leopards"
+  | "mnp"
+  | "trax"
+  | "callcourier";
 
 export interface Shop {
   id: string;

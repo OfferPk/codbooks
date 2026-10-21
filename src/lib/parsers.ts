@@ -1,6 +1,21 @@
 import { parseCsv, getField } from "./csv";
 import { pkrToPaisa } from "./money";
 import { normalizeAwb, normalizeCn, normalizeOrderId } from "./normalize";
+import type { CourierCode } from "./types";
+import { parseLeopards } from "./importers/leopards";
+import { parseMnp } from "./importers/mnp";
+import { parseTrax } from "./importers/trax";
+import { parseCallCourier } from "./importers/callcourier";
+
+import { detectCourierCode } from "./importers/detect";
+
+export {
+  parseLeopards,
+  parseMnp,
+  parseTrax,
+  parseCallCourier,
+  detectCourierCode,
+};
 
 export type DetectedTemplate =
   | "orders"
@@ -8,6 +23,10 @@ export type DetectedTemplate =
   | "tcs_detail"
   | "postex"
   | "postex_portal"
+  | "leopards"
+  | "mnp"
+  | "trax"
+  | "callcourier"
   | "unknown";
 
 export interface ParsedOrder {
@@ -56,7 +75,12 @@ export function detectTemplate(headers: string[]): DetectedTemplate {
     return "orders";
   }
   if (h.has("cnsg_no") && h.has("codamount")) return "tcs_invoice";
-  if (h.has("cn by courier") || h.has("amount paid")) return "tcs_detail";
+  if (
+    h.has("cn by courier") ||
+    (h.has("amount paid") && (h.has("order no") || h.has("payment status") || h.has("cn status")))
+  ) {
+    return "tcs_detail";
+  }
   if (
     h.has("trackingnumber") &&
     h.has("orderrefnumber") &&
@@ -65,6 +89,33 @@ export function detectTemplate(headers: string[]): DetectedTemplate {
     return "postex_portal";
   }
   if (h.has("trackingnumber") && h.has("settle")) return "postex";
+  if (
+    (h.has("track number") || h.has("sheet number")) &&
+    (h.has("cod amount") || h.has("net amount") || h.has("delivery charges"))
+  ) {
+    return "leopards";
+  }
+  if (
+    (h.has("voucher no") || h.has("voucher_no") || h.has("net cod") || h.has("cod value") || h.has("fed")) &&
+    (h.has("cn number") || h.has("consignment no") || h.has("order ref"))
+  ) {
+    return "mnp";
+  }
+  if (
+    h.has("trax cn") ||
+    h.has("disbursement id") ||
+    h.has("disbursement date") ||
+    h.has("cash handling fee") ||
+    (h.has("tracking number") && h.has("product amount") && h.has("service charges"))
+  ) {
+    return "trax";
+  }
+  if (
+    (h.has("bank charges") || h.has("sheet no") || h.has("sheet_no") || h.has("consignmentnumber")) &&
+    (h.has("cn number") || h.has("cn") || h.has("ref no") || h.has("balance"))
+  ) {
+    return "callcourier";
+  }
   return "unknown";
 }
 
@@ -107,6 +158,14 @@ export function parseOrdersCsv(text: string): {
       courierRaw.includes("post ex")
     ) {
       courier_code = "postex";
+    } else if (courierRaw.includes("leopard")) {
+      courier_code = "leopards";
+    } else if (courierRaw.includes("mnp") || courierRaw.includes("m&p")) {
+      courier_code = "mnp";
+    } else if (courierRaw.includes("trax")) {
+      courier_code = "trax";
+    } else if (courierRaw.includes("callcourier") || courierRaw.includes("call courier")) {
+      courier_code = "callcourier";
     }
     rows.push({
       external_order_id: normalizeOrderId(external),
@@ -297,7 +356,7 @@ export function parseSettlementByTemplate(
   hint?: string
 ): {
   template: DetectedTemplate;
-  courierCode: "tcs" | "postex" | null;
+  courierCode: CourierCode | null;
   rows: ParsedSettlement[];
   errors: string[];
 } {
@@ -305,6 +364,10 @@ export function parseSettlementByTemplate(
   let template = detectTemplate(headers);
   if (hint === "tcs" && template === "unknown") template = "tcs_invoice";
   if (hint === "postex" && template === "unknown") template = "postex";
+  if (hint === "leopards" && template === "unknown") template = "leopards";
+  if (hint === "mnp" && template === "unknown") template = "mnp";
+  if (hint === "trax" && template === "unknown") template = "trax";
+  if (hint === "callcourier" && template === "unknown") template = "callcourier";
 
   if (template === "tcs_invoice") {
     const r = parseTcsInvoice(text);
@@ -318,10 +381,26 @@ export function parseSettlementByTemplate(
     const r = parsePostex(text);
     return { template, courierCode: "postex", ...r };
   }
+  if (template === "leopards") {
+    const r = parseLeopards(text);
+    return { template, courierCode: "leopards", ...r };
+  }
+  if (template === "mnp") {
+    const r = parseMnp(text);
+    return { template, courierCode: "mnp", ...r };
+  }
+  if (template === "trax") {
+    const r = parseTrax(text);
+    return { template, courierCode: "trax", ...r };
+  }
+  if (template === "callcourier") {
+    const r = parseCallCourier(text);
+    return { template, courierCode: "callcourier", ...r };
+  }
   return {
     template: "unknown",
     courierCode: null,
     rows: [],
-    errors: ["Unrecognized CPR/settlement CSV headers"],
+    errors: ["Unrecognized CPR/settlement CSV headers. Supported couriers: TCS, PostEx, Leopards, M&P, Trax, Call Courier."],
   };
 }
