@@ -95,7 +95,7 @@ export function Nav({ userName, orgName, role }: NavProps) {
     .map((part) => part[0]?.toUpperCase())
     .join("");
 
-  function renderLinks(isMobile = false) {
+  function renderLinks() {
     return links.map((link) => {
       const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
       const label = dict[link.labelKey] || link.defaultLabel;
@@ -203,7 +203,7 @@ export function Nav({ userName, orgName, role }: NavProps) {
           aria-label="Mobile navigation"
           className="app-nav-scroll -mx-2 flex gap-1 overflow-x-auto border-t border-slate-100 py-1.5 dark:border-slate-800 lg:hidden"
         >
-          {renderLinks(true)}
+          {renderLinks()}
         </nav>
       </div>
     </header>
