@@ -6,12 +6,41 @@
   --background: #f1f5f9;
   --foreground: #0f172a;
   --brand: #0369a1;
+  --card-bg: #ffffff;
+  --card-border: #e2e8f0;
+  --input-bg: #ffffff;
+  --input-border: #cbd5e1;
+  --text-muted: #64748b;
+  --header-bg: #ffffff;
+}
+
+html.dark {
+  --background: #090d16;
+  --foreground: #f1f5f9;
+  --brand: #38bdf8;
+  --card-bg: #131b2e;
+  --card-border: #1e293b;
+  --input-bg: #1e293b;
+  --input-border: #334155;
+  --text-muted: #94a3b8;
+  --header-bg: #0d1527;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
   min-height: 100dvh;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+/* RTL Urdu Support */
+html[dir="rtl"] {
+  text-align: right;
+  direction: rtl;
+}
+
+html[dir="rtl"] .card {
+  text-align: right;
 }
 
 @layer components {
@@ -19,24 +48,72 @@ body {
     @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition disabled:opacity-50;
   }
   .btn-primary {
-    @apply btn bg-sky-700 text-white hover:bg-sky-800;
+    @apply btn bg-sky-700 text-white hover:bg-sky-800 dark:bg-sky-600 dark:hover:bg-sky-500;
   }
   .btn-secondary {
-    @apply btn bg-white text-slate-700 border border-slate-200 hover:bg-slate-50;
+    @apply btn bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700;
   }
   .btn-danger {
-    @apply btn bg-red-600 text-white hover:bg-red-700;
+    @apply btn bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600;
   }
   .input {
-    @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100;
+    @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-sky-900;
   }
   .label {
-    @apply mb-1 block text-xs font-medium text-slate-600;
+    @apply mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400;
   }
   .card {
-    @apply rounded-xl border border-slate-200 bg-white p-4 shadow-sm;
+    @apply rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900;
   }
   .badge {
     @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium;
   }
+}
+
+/* Dark Mode Overrides for Tables & Text */
+html.dark header {
+  background-color: var(--header-bg) !important;
+  border-color: #1e293b !important;
+}
+
+html.dark table thead {
+  background-color: #131b2e !important;
+  color: #94a3b8 !important;
+  border-color: #1e293b !important;
+}
+
+html.dark table tbody tr {
+  border-color: #1e293b !important;
+}
+
+html.dark table tbody tr:hover {
+  background-color: rgba(30, 41, 59, 0.5) !important;
+}
+
+html.dark .text-slate-900,
+html.dark .text-slate-800 {
+  color: #f1f5f9 !important;
+}
+
+html.dark .text-slate-700,
+html.dark .text-slate-600 {
+  color: #cbd5e1 !important;
+}
+
+html.dark .text-slate-500,
+html.dark .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+html.dark .bg-slate-50 {
+  background-color: #131b2e !important;
+}
+
+html.dark .bg-slate-100 {
+  background-color: #1e293b !important;
+}
+
+html.dark .border-slate-100,
+html.dark .border-slate-200 {
+  border-color: #1e293b !important;
 }

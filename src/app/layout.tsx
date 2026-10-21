@@ -16,7 +16,26 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                var theme = localStorage.getItem('codbooks_theme');
+                if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                  document.documentElement.classList.add('dark');
+                }
+                var lang = localStorage.getItem('codbooks_lang');
+                if (lang === 'ur') {
+                  document.documentElement.lang = 'ur';
+                  document.documentElement.dir = 'rtl';
+                }
+              } catch (e) {}
+            `,
+          }}
+        />
+      </head>
       <body className="antialiased font-sans">{children}</body>
     </html>
   );
