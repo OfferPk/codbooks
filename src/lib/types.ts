@@ -1,5 +1,5 @@
 export type OrgType = "seller" | "firm";
-export type Role = "owner" | "ops" | "accountant";
+export type Role = "owner" | "ops" | "accountant" | "staff";
 export type UploadKind = "orders" | "cpr";
 export type UploadStatus = "pending" | "parsed" | "failed";
 export type MatchStatus =
@@ -10,6 +10,15 @@ export type MatchStatus =
   | "double_paid";
 export type CourierCode = "tcs" | "postex";
 
+export interface Shop {
+  id: string;
+  org_id: string;
+  name: string;
+  code: string | null;
+  is_default: boolean;
+  created_at: string;
+}
+
 export interface SessionUser {
   id: string;
   email: string;
@@ -18,6 +27,8 @@ export interface SessionUser {
   org_name: string;
   org_type: OrgType;
   role: Role;
+  shop_id?: string | null;
+  shop_name?: string | null;
 }
 
 export interface HealthSummary {

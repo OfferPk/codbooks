@@ -32,12 +32,21 @@ export function getDb(): Database.Database {
   return db;
 }
 
-function migrate(db: Database.Database) {
+export function migrate(db: Database.Database) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS orgs (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       type TEXT NOT NULL CHECK(type IN ('seller','firm')),
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS shops (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      code TEXT,
+      is_default INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     );
 
@@ -53,7 +62,7 @@ function migrate(db: Database.Database) {
       id TEXT PRIMARY KEY,
       org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      role TEXT NOT NULL CHECK(role IN ('owner','ops','accountant')),
+      role TEXT NOT NULL CHECK(role IN ('owner','ops','accountant','staff')),
       UNIQUE(org_id, user_id)
     );
 
@@ -68,6 +77,7 @@ function migrate(db: Database.Database) {
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      active_shop_id TEXT REFERENCES shops(id),
       expires_at TEXT NOT NULL
     );
 
@@ -203,13 +213,81 @@ function migrate(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_audit_org ON audit_events(org_id);
   `);
 
-  const orderCols = db.prepare("PRAGMA table_info(orders)").all() as Array<{
+  // Additive column migrations
+  function ensureColumn(table: string, colName: string, colDef: string) {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+      name: string;
+    }>;
+    if (!cols.some((c) => c.name === colName)) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${colName} ${colDef}`);
+    }
+  }
+
+  ensureColumn("orders", "courier_id", "TEXT REFERENCES couriers(id)");
+  ensureColumn("orders", "shop_id", "TEXT REFERENCES shops(id)");
+  ensureColumn("shipments", "shop_id", "TEXT REFERENCES shops(id)");
+  ensureColumn("settlement_lines", "shop_id", "TEXT REFERENCES shops(id)");
+  ensureColumn("uploads", "shop_id", "TEXT REFERENCES shops(id)");
+  ensureColumn("matches", "shop_id", "TEXT REFERENCES shops(id)");
+  ensureColumn("match_runs", "shop_id", "TEXT REFERENCES shops(id)");
+  ensureColumn("sessions", "active_shop_id", "TEXT REFERENCES shops(id)");
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_shops_org ON shops(org_id);
+    CREATE INDEX IF NOT EXISTS idx_orders_shop ON orders(shop_id);
+    CREATE INDEX IF NOT EXISTS idx_shipments_shop ON shipments(shop_id);
+    CREATE INDEX IF NOT EXISTS idx_settlement_shop ON settlement_lines(shop_id);
+    CREATE INDEX IF NOT EXISTS idx_matches_shop ON matches(shop_id);
+  `);
+
+  // Backfill default shops for existing orgs and update records with NULL shop_id
+  const orgRows = db
+    .prepare("SELECT id, name, created_at FROM orgs")
+    .all() as Array<{
+    id: string;
     name: string;
+    created_at: string;
   }>;
-  if (!orderCols.some((c) => c.name === "courier_id")) {
-    db.exec(
-      "ALTER TABLE orders ADD COLUMN courier_id TEXT REFERENCES couriers(id)"
-    );
+
+  for (const org of orgRows) {
+    const existingDefault = db
+      .prepare(
+        "SELECT id FROM shops WHERE org_id = ? AND is_default = 1 LIMIT 1"
+      )
+      .get(org.id) as { id: string } | undefined;
+
+    let defaultShopId = existingDefault?.id;
+    if (!defaultShopId) {
+      defaultShopId = `shop_default_${org.id}`;
+      db.prepare(
+        `INSERT OR IGNORE INTO shops (id, org_id, name, code, is_default, created_at)
+         VALUES (?, ?, ?, 'default', 1, ?)`
+      ).run(
+        defaultShopId,
+        org.id,
+        `${org.name} Main Shop`,
+        org.created_at || new Date().toISOString()
+      );
+    }
+
+    db.prepare(
+      "UPDATE orders SET shop_id = ? WHERE org_id = ? AND shop_id IS NULL"
+    ).run(defaultShopId, org.id);
+    db.prepare(
+      "UPDATE shipments SET shop_id = ? WHERE org_id = ? AND shop_id IS NULL"
+    ).run(defaultShopId, org.id);
+    db.prepare(
+      "UPDATE settlement_lines SET shop_id = ? WHERE org_id = ? AND shop_id IS NULL"
+    ).run(defaultShopId, org.id);
+    db.prepare(
+      "UPDATE uploads SET shop_id = ? WHERE org_id = ? AND shop_id IS NULL"
+    ).run(defaultShopId, org.id);
+    db.prepare(
+      "UPDATE matches SET shop_id = ? WHERE org_id = ? AND shop_id IS NULL"
+    ).run(defaultShopId, org.id);
+    db.prepare(
+      "UPDATE match_runs SET shop_id = ? WHERE org_id = ? AND shop_id IS NULL"
+    ).run(defaultShopId, org.id);
   }
 
   // Seed courier catalog if empty

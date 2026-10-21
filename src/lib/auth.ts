@@ -14,14 +14,28 @@ export function verifyPassword(password: string, hash: string): boolean {
   return bcrypt.compareSync(password, hash);
 }
 
-export function createSession(userId: string, orgId: string): string {
+export function createSession(
+  userId: string,
+  orgId: string,
+  activeShopId?: string | null
+): string {
   const db = getDb();
   const id = crypto.randomUUID();
   const expires = new Date();
   expires.setDate(expires.getDate() + SESSION_DAYS);
+
+  // If activeShopId not provided, default to org's default shop
+  let shopId = activeShopId;
+  if (!shopId) {
+    const defaultShop = db
+      .prepare("SELECT id FROM shops WHERE org_id = ? AND is_default = 1 LIMIT 1")
+      .get(orgId) as { id: string } | undefined;
+    shopId = defaultShop?.id || null;
+  }
+
   db.prepare(
-    "INSERT INTO sessions (id, user_id, org_id, expires_at) VALUES (?, ?, ?, ?)"
-  ).run(id, userId, orgId, expires.toISOString());
+    "INSERT INTO sessions (id, user_id, org_id, active_shop_id, expires_at) VALUES (?, ?, ?, ?, ?)"
+  ).run(id, userId, orgId, shopId, expires.toISOString());
   return id;
 }
 
@@ -37,12 +51,14 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   const db = getDb();
   const row = db
     .prepare(
-      `SELECT u.id, u.email, u.name, s.org_id, s.expires_at,
-              o.name as org_name, o.type as org_type, m.role
+      `SELECT u.id, u.email, u.name, s.org_id, s.expires_at, s.active_shop_id as shop_id,
+              o.name as org_name, o.type as org_type, m.role,
+              sh.name as shop_name
        FROM sessions s
        JOIN users u ON u.id = s.user_id
        JOIN orgs o ON o.id = s.org_id
        JOIN memberships m ON m.user_id = u.id AND m.org_id = s.org_id
+       LEFT JOIN shops sh ON sh.id = s.active_shop_id
        WHERE s.id = ?`
     )
     .get(sessionId) as
@@ -55,6 +71,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
         org_type: OrgType;
         role: Role;
         expires_at: string;
+        shop_id: string | null;
+        shop_name: string | null;
       }
     | undefined;
 
@@ -72,6 +90,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     org_name: row.org_name,
     org_type: row.org_type,
     role: row.role,
+    shop_id: row.shop_id || null,
+    shop_name: row.shop_name || null,
   };
 }
 
@@ -143,12 +163,14 @@ export async function requireRoles(
   return user;
 }
 
-/** Action → allowed roles. Accountant cannot mutate uploads/match. */
+/** Action → allowed roles. Staff cannot delete or change settings. */
 export const ROLE_MATRIX = {
-  mutate: ["owner", "ops"] as Role[],
-  export: ["owner", "ops", "accountant"] as Role[],
+  mutate: ["owner", "ops", "staff"] as Role[],
+  export: ["owner", "ops", "accountant", "staff"] as Role[],
   audit: ["owner", "accountant"] as Role[],
-  read: ["owner", "ops", "accountant"] as Role[],
+  read: ["owner", "ops", "accountant", "staff"] as Role[],
+  settings: ["owner"] as Role[],
+  delete: ["owner"] as Role[],
 } as const;
 
 export async function requireAction(
@@ -156,4 +178,3 @@ export async function requireAction(
 ): Promise<SessionUser> {
   return requireRoles(...ROLE_MATRIX[action]);
 }
-

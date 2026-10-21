@@ -4,7 +4,7 @@ import { getDb } from "@/lib/db";
 import { MIN_PASSWORD_LENGTH } from "@/lib/rate-limit";
 import type { Role } from "@/lib/types";
 
-const INVITE_ROLES: Role[] = ["ops", "accountant"];
+const INVITE_ROLES: Role[] = ["ops", "accountant", "staff"];
 
 export async function GET() {
   try {
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     }
     if (!INVITE_ROLES.includes(role)) {
       return NextResponse.json(
-        { error: "Role must be ops or accountant" },
+        { error: "Role must be ops, accountant, or staff" },
         { status: 400 }
       );
     }
