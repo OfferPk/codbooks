@@ -1,23 +1,20 @@
 # CodBooks — Status
 
-**Version:** 0.1.0 (+ Unreleased improve pack 2)  
-**Updated:** 2026-09-28T16:50:00+05:00 (Asia/Karachi)  
-**Status:** READY_FOR_QA
+**Version:** 0.1.0 (Active development on `master`)  
+**Updated:** 2026-10-21T18:00:00+05:00 (Asia/Karachi)  
+**Status:** READY / ACTIVE
 
-## Current round
+## Current Status & Verification
+- **Continuous Integration**: `.github/workflows/ci.yml` validates `npm ci`, `npm run lint`, `npm test`, and `npm run build` on PRs and pushes to `master`.
+- **Test Suite**: **80/80 passing** (15 test files) across golden-path, parsers, matching, aging, loss-report, auth-hygiene, multi-shop isolation, and security gates.
+- **Framework**: Next.js 15.5.28 + React 18 + Tailwind CSS + SQLite (`better-sqlite3` ^13.0.3 with Node 24 prebuilds).
+- **Git Push / GitHub Actions**: Unblocked and active on `OfferPk/codbooks`.
 
-**Unreleased pack 2** (on `260f765`): LIKE escape for Matches `q`, Aging → Matches deep-links + `aging` filter, chase notes PATCH, receivable export status/date window. Prior improve dual-cleared; release `92bd84f` untouched. No `git push`.
-
-| Gate | Result |
-|------|--------|
-| Prior QA R2 (v0.1.0) | **PASS** (`QA-REPORT-R2.md`) |
-| Prior Security R2 (v0.1.0) | **PASS_WITH_NOTES** (`SECURITY-REPORT-R2.md`) |
-| Prior improve dual-clear | **PASS** / **PASS_WITH_NOTES** (`QA-REPORT-IMPROVE-20260928.md`, `SECURITY-REPORT-IMPROVE-20260928.md`) |
-| `npm test` (pack 2) | **52/52** (12 files) |
-| `npm run build` | **success** (Next.js 15.5.25) |
-| Pack 2 status | **READY_FOR_QA** |
-| Git push / tag | **blocked** — `GH_TOKEN` invalid; local commits only |
-
-## Prior dual-clear R2 (v0.1.0)
-
-Ship clear for first publish `OfferPk/codbooks` v0.1.0 when token works. See `CHANGELOG.md` [0.1.0].
+| Gate | Result | Notes |
+|------|--------|-------|
+| `npm test` | **80/80 PASS** (15 files) | Golden path, parsers, loss report, isolation, authz |
+| `npx tsc --noEmit` | **PASS** | Strict TypeScript check |
+| `npm run lint` | **PASS** | ESLint clean |
+| `npm run build` | **PASS** | All 28 static & dynamic routes compiled |
+| GitHub CI | **Configured** | `.github/workflows/ci.yml` |
+| Security Review | **Run 1 Complete** | `audits/codbooks/run-1/` |
