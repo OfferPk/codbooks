@@ -8,17 +8,29 @@ export async function GET() {
   try {
     const user = await requireUser();
     const db = getDb();
-    const rows = db
-      .prepare(
-        `SELECT u.*, c.code as courier_code, usr.name as uploaded_by_name
-         FROM uploads u
-         LEFT JOIN couriers c ON c.id = u.courier_id
-         LEFT JOIN users usr ON usr.id = u.uploaded_by
-         WHERE u.org_id = ?
-         ORDER BY u.created_at DESC
-         LIMIT 100`
-      )
-      .all(user.org_id);
+    const rows = user.shop_id
+      ? db
+          .prepare(
+            `SELECT u.*, c.code as courier_code, usr.name as uploaded_by_name
+             FROM uploads u
+             LEFT JOIN couriers c ON c.id = u.courier_id
+             LEFT JOIN users usr ON usr.id = u.uploaded_by
+             WHERE u.org_id = ? AND (u.shop_id = ? OR u.shop_id IS NULL)
+             ORDER BY u.created_at DESC
+             LIMIT 100`
+          )
+          .all(user.org_id, user.shop_id)
+      : db
+          .prepare(
+            `SELECT u.*, c.code as courier_code, usr.name as uploaded_by_name
+             FROM uploads u
+             LEFT JOIN couriers c ON c.id = u.courier_id
+             LEFT JOIN users usr ON usr.id = u.uploaded_by
+             WHERE u.org_id = ?
+             ORDER BY u.created_at DESC
+             LIMIT 100`
+          )
+          .all(user.org_id);
     return NextResponse.json({ uploads: rows });
   } catch (e) {
     if (e instanceof AuthError) {
@@ -36,6 +48,8 @@ export async function POST(req: NextRequest) {
     const kind = String(form.get("kind") || "orders");
     const courierHint = String(form.get("courier") || "");
     const autoMatch = String(form.get("auto_match") || "true") !== "false";
+    const shopIdParam = form.get("shop_id") ? String(form.get("shop_id")) : null;
+    const shopId = user.shop_id || shopIdParam || null;
 
     if (!file) {
       return NextResponse.json({ error: "file required" }, { status: 400 });
@@ -49,7 +63,8 @@ export async function POST(req: NextRequest) {
         user.id,
         filename,
         text,
-        courierHint || undefined
+        courierHint || undefined,
+        shopId
       );
       let match = null;
       if (autoMatch && result.rowCount > 0) {
@@ -64,7 +79,8 @@ export async function POST(req: NextRequest) {
         user.id,
         filename,
         text,
-        courierHint || undefined
+        courierHint || undefined,
+        shopId
       );
       let match = null;
       if (autoMatch && result.rowCount > 0) {
