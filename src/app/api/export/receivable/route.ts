@@ -39,7 +39,18 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    let targetShopId: string | null = null;
+    if (user.role === "staff") {
+      targetShopId = user.shop_id || null;
+    } else {
+      targetShopId = req.nextUrl.searchParams.get("shopId") || user.shop_id || null;
+    }
+
     const db = getDb();
+    const runSubquery = targetShopId
+      ? `(SELECT id FROM match_runs WHERE org_id = ? AND (shop_id = ? OR shop_id IS NULL) ORDER BY created_at DESC LIMIT 1)`
+      : `(SELECT id FROM match_runs WHERE org_id = ? ORDER BY created_at DESC LIMIT 1)`;
+
     let sql = `
          SELECT m.status, m.awb, m.cn, m.expected_paisa, m.remitted_paisa, m.short_paisa,
                 m.reference_date, m.notes, c.code as courier,
@@ -48,10 +59,15 @@ export async function GET(req: NextRequest) {
          LEFT JOIN couriers c ON c.id = m.courier_id
          LEFT JOIN orders o ON o.id = m.order_id
          WHERE m.org_id = ?
-           AND m.match_run_id = (
-             SELECT id FROM match_runs WHERE org_id = ? ORDER BY created_at DESC LIMIT 1
-           )`;
-    const params: string[] = [user.org_id, user.org_id];
+           AND m.match_run_id = ${runSubquery}`;
+    const params: string[] = targetShopId
+      ? [user.org_id, user.org_id, targetShopId]
+      : [user.org_id, user.org_id];
+
+    if (targetShopId) {
+      sql += ` AND (m.shop_id = ? OR m.shop_id IS NULL)`;
+      params.push(targetShopId);
+    }
 
     if (statuses.length === 1) {
       sql += ` AND m.status = ?`;
