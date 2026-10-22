@@ -1,5 +1,7 @@
 export type DetectedTemplate =
   | "orders"
+  | "shopify_orders"
+  | "woocommerce_orders"
   | "tcs_invoice"
   | "tcs_detail"
   | "postex"
@@ -8,6 +10,8 @@ export type DetectedTemplate =
   | "mnp"
   | "trax"
   | "callcourier"
+  | "rider"
+  | "swyft"
   | "unknown";
 
 export type CourierCode =
@@ -16,7 +20,9 @@ export type CourierCode =
   | "leopards"
   | "mnp"
   | "trax"
-  | "callcourier";
+  | "callcourier"
+  | "rider"
+  | "swyft";
 
 export function headerSet(headers: string[]): Set<string> {
   return new Set(headers.map((h) => h.toLowerCase().trim()));
@@ -25,12 +31,45 @@ export function headerSet(headers: string[]): Set<string> {
 export function detectTemplate(headers: string[]): DetectedTemplate {
   const h = headerSet(headers);
 
+  // Shopify Orders Export
+  if (
+    h.has("fulfillments tracking number") ||
+    (h.has("financial status") && h.has("fulfillment status")) ||
+    (h.has("name") && h.has("shipping name") && h.has("total"))
+  ) {
+    return "shopify_orders";
+  }
+
+  // WooCommerce Orders Export
+  if (
+    (h.has("order number") || h.has("order_number")) &&
+    (h.has("order total") || h.has("order status"))
+  ) {
+    return "woocommerce_orders";
+  }
+
   // Generic Orders
   if (
     h.has("external_order_id") ||
     (h.has("cod_amount_pkr") && (h.has("awb") || h.has("cn")))
   ) {
     return "orders";
+  }
+
+  // Rider Pakistan
+  if (
+    h.has("rider cn") ||
+    (h.has("tracking number") && (h.has("net remittance") || h.has("cash collection") || h.has("rider fee")))
+  ) {
+    return "rider";
+  }
+
+  // Swyft Logistics
+  if (
+    h.has("swyft tracking id") ||
+    (h.has("tracking number") && (h.has("fuel surcharge") || h.has("net payable") || h.has("consignment status")))
+  ) {
+    return "swyft";
   }
 
   // Trax (check early so amount paid doesn't collide with TCS)
@@ -106,6 +145,10 @@ export function detectCourierCode(template: DetectedTemplate): CourierCode | nul
       return "trax";
     case "callcourier":
       return "callcourier";
+    case "rider":
+      return "rider";
+    case "swyft":
+      return "swyft";
     default:
       return null;
   }

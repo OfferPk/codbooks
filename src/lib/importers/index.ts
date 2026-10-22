@@ -5,6 +5,9 @@ import { parseLeopards } from "./leopards";
 import { parseMnp } from "./mnp";
 import { parseTrax } from "./trax";
 import { parseCallCourier } from "./callcourier";
+import { parseRider } from "./rider";
+import { parseSwyft } from "./swyft";
+import { parseShopifyOrders, parseWooCommerceOrders } from "./ecommerce";
 import {
   detectTemplate,
   detectCourierCode,
@@ -17,6 +20,10 @@ export {
   parseMnp,
   parseTrax,
   parseCallCourier,
+  parseRider,
+  parseSwyft,
+  parseShopifyOrders,
+  parseWooCommerceOrders,
   detectTemplate,
   detectCourierCode,
   type DetectedTemplate,
@@ -44,6 +51,8 @@ export function parseSettlement(
     else if (cleanHint === "mnp") template = "mnp";
     else if (cleanHint === "trax") template = "trax";
     else if (cleanHint === "callcourier") template = "callcourier";
+    else if (cleanHint === "rider") template = "rider";
+    else if (cleanHint === "swyft") template = "swyft";
   }
 
   const courierCode = detectCourierCode(template);
@@ -64,13 +73,17 @@ export function parseSettlement(
       return { template, courierCode, ...parseTrax(text) };
     case "callcourier":
       return { template, courierCode, ...parseCallCourier(text) };
+    case "rider":
+      return { template, courierCode, ...parseRider(text) };
+    case "swyft":
+      return { template, courierCode, ...parseSwyft(text) };
     default:
       return {
         template: "unknown",
         courierCode: null,
         rows: [],
         errors: [
-          "Unrecognized CPR/settlement CSV headers. Supported couriers: TCS, PostEx, Leopards, M&P, Trax, Call Courier.",
+          "Unrecognized CPR/settlement CSV headers. Supported couriers: TCS, PostEx, Leopards, M&P, Trax, Call Courier, Rider, Swyft.",
         ],
       };
   }
