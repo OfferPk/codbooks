@@ -12,6 +12,7 @@ import {
   ensurePrivateDir,
   MODE_FILE,
 } from "./fs-perms";
+import { getDefaultShop } from "./shops";
 
 const UPLOAD_DIR = path.join(process.cwd(), "data", "uploads");
 
@@ -69,7 +70,8 @@ export function ingestOrders(
   userId: string,
   filename: string,
   text: string,
-  courierHint?: string
+  courierHint?: string,
+  shopId?: string | null
 ): { uploadId: string; rowCount: number; errors: string[] } {
   ensureUploadDir();
   const db = getDb();
@@ -81,6 +83,11 @@ export function ingestOrders(
   );
   writeUploadFile(fullPath, text);
 
+  const resolvedShopId =
+    shopId !== undefined && shopId !== null
+      ? shopId
+      : (getDefaultShop(orgId)?.id || null);
+
   const { rows, errors } = parseOrdersCsv(text);
   const hintCourierId = resolveCourierId(null, courierHint);
   const now = new Date().toISOString();
@@ -88,20 +95,21 @@ export function ingestOrders(
 
   const insertUpload = db.prepare(
     `INSERT INTO uploads
-      (id, org_id, kind, courier_id, storage_key, filename, uploaded_by, created_at, row_count, status, error_summary, template_hint)
-     VALUES (?, ?, 'orders', ?, ?, ?, ?, ?, ?, ?, ?, 'orders')`
+      (id, org_id, shop_id, kind, courier_id, storage_key, filename, uploaded_by, created_at, row_count, status, error_summary, template_hint)
+     VALUES (?, ?, ?, 'orders', ?, ?, ?, ?, ?, ?, ?, ?, 'orders')`
   );
   const insertOrder = db.prepare(
     `INSERT INTO orders
-      (id, org_id, upload_id, courier_id, external_order_id, awb, cn, customer_name,
+      (id, org_id, shop_id, upload_id, courier_id, external_order_id, awb, cn, customer_name,
        order_amount_paisa, currency, ordered_at, source, status, raw_json, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
   const tx = db.transaction(() => {
     insertUpload.run(
       uploadId,
       orgId,
+      resolvedShopId,
       hintCourierId,
       storageKey,
       displayName,
@@ -117,6 +125,7 @@ export function ingestOrders(
       insertOrder.run(
         crypto.randomUUID(),
         orgId,
+        resolvedShopId,
         uploadId,
         rowCourier,
         r.external_order_id || null,
@@ -137,6 +146,7 @@ export function ingestOrders(
 
   audit(orgId, userId, "upload_orders", {
     upload_id: uploadId,
+    shop_id: resolvedShopId,
     filename: displayName,
     row_count: rows.length,
     errors: errors.length,
@@ -151,7 +161,8 @@ export function ingestCpr(
   userId: string,
   filename: string,
   text: string,
-  courierHint?: string
+  courierHint?: string,
+  shopId?: string | null
 ): {
   uploadId: string;
   rowCount: number;
@@ -169,6 +180,11 @@ export function ingestCpr(
   );
   writeUploadFile(fullPath, text);
 
+  const resolvedShopId =
+    shopId !== undefined && shopId !== null
+      ? shopId
+      : (getDefaultShop(orgId)?.id || null);
+
   const parsed = parseSettlementByTemplate(text, courierHint);
   const courierId = parsed.courierCode
     ? getCourierIdByCode(parsed.courierCode)
@@ -179,11 +195,12 @@ export function ingestCpr(
   if (!courierId) {
     db.prepare(
       `INSERT INTO uploads
-        (id, org_id, kind, courier_id, storage_key, filename, uploaded_by, created_at, row_count, status, error_summary, template_hint)
-       VALUES (?, ?, 'cpr', NULL, ?, ?, ?, ?, 0, 'failed', ?, ?)`
+        (id, org_id, shop_id, kind, courier_id, storage_key, filename, uploaded_by, created_at, row_count, status, error_summary, template_hint)
+       VALUES (?, ?, ?, 'cpr', NULL, ?, ?, ?, ?, 0, 'failed', ?, ?)`
     ).run(
       uploadId,
       orgId,
+      resolvedShopId,
       storageKey,
       displayName,
       userId,
@@ -204,22 +221,23 @@ export function ingestCpr(
 
   const insertUpload = db.prepare(
     `INSERT INTO uploads
-      (id, org_id, kind, courier_id, storage_key, filename, uploaded_by, created_at, row_count, status, error_summary, template_hint)
-     VALUES (?, ?, 'cpr', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      (id, org_id, shop_id, kind, courier_id, storage_key, filename, uploaded_by, created_at, row_count, status, error_summary, template_hint)
+     VALUES (?, ?, ?, 'cpr', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const insertLine = db.prepare(
     `INSERT INTO settlement_lines
-      (id, org_id, upload_id, courier_id, awb, cn, order_ref,
+      (id, org_id, shop_id, upload_id, courier_id, awb, cn, order_ref,
        remitted_paisa, fee_delivery_paisa, fee_return_paisa, fee_gst_paisa,
        fee_wht_paisa, fee_cash_handling_paisa, fee_other_paisa, cod_booked_paisa,
        settled_at, settlement_id, delivery_status, raw_json, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
   const tx = db.transaction(() => {
     insertUpload.run(
       uploadId,
       orgId,
+      resolvedShopId,
       courierId,
       storageKey,
       displayName,
@@ -234,6 +252,7 @@ export function ingestCpr(
       insertLine.run(
         crypto.randomUUID(),
         orgId,
+        resolvedShopId,
         uploadId,
         courierId,
         r.awb || null,
@@ -259,6 +278,7 @@ export function ingestCpr(
 
   audit(orgId, userId, "upload_cpr", {
     upload_id: uploadId,
+    shop_id: resolvedShopId,
     filename: displayName,
     row_count: parsed.rows.length,
     template: parsed.template,

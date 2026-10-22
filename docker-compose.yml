@@ -1,0 +1,26 @@
+services:
+  codbooks:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: codbooks:latest
+    container_name: codbooks-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_PATH=/app/data/codbooks.db
+    volumes:
+      - codbooks_data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  codbooks_data:
+    name: codbooks_data

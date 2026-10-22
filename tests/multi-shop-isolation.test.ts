@@ -246,6 +246,78 @@ describe("Multi-Shop Support & Role Isolation (Issue #6)", () => {
       const crossShop = db.prepare("SELECT * FROM orders WHERE id = ? AND shop_id = ?").all(order1Id, shop2.id);
       expect(crossShop.length).toBe(0);
     });
+
+    it("scopes newly ingested orders and CPR uploads to the specified shop (Issue #14)", async () => {
+      const { ingestOrders, ingestCpr } = await import("@/lib/ingest");
+      const db = getDb();
+
+      const shop1 = createShop(orgAId, "Ingest Shop 1", "IS10", false);
+      const shop2 = createShop(orgAId, "Ingest Shop 2", "IS20", false);
+
+      const sampleOrdersCsv =
+        "Order ID,AWB,Customer Name,Amount,Courier,Status\n" +
+        "ORD-ING-1,AWB-ING-1,Customer A,1500,tcs,Delivered\n";
+
+      const sampleCprCsv =
+        "booking date,cn by courier,cn status,order no,payment status,amount paid,parcel weight,city,delivery charges,delivery date,payment date\n" +
+        "2026-09-08,AWB-ING-1,Delivered,ORD-ING-1,Paid,1350,0.5,Lahore,150,2026-09-09,2026-09-10\n";
+
+      // Ingest orders explicitly scoped to shop1
+      const orderRes = ingestOrders(
+        orgAId,
+        ownerAId,
+        "sample-orders.csv",
+        sampleOrdersCsv,
+        "tcs",
+        shop1.id
+      );
+      expect(orderRes.rowCount).toBe(1);
+
+      // Verify upload record has shop_id = shop1.id
+      const uploadRow = db
+        .prepare("SELECT * FROM uploads WHERE id = ?")
+        .get(orderRes.uploadId) as any;
+      expect(uploadRow.shop_id).toBe(shop1.id);
+
+      // Verify inserted order has shop_id = shop1.id
+      const orderRow = db
+        .prepare("SELECT * FROM orders WHERE upload_id = ?")
+        .get(orderRes.uploadId) as any;
+      expect(orderRow.shop_id).toBe(shop1.id);
+
+      // Querying orders for shop2 yields 0 records
+      const shop2Orders = db
+        .prepare("SELECT * FROM orders WHERE org_id = ? AND shop_id = ?")
+        .all(orgAId, shop2.id);
+      expect(shop2Orders.length).toBe(0);
+
+      // Ingest CPR explicitly scoped to shop1
+      const cprRes = ingestCpr(
+        orgAId,
+        ownerAId,
+        "sample-cpr.csv",
+        sampleCprCsv,
+        "tcs",
+        shop1.id
+      );
+      expect(cprRes.rowCount).toBe(1);
+
+      const cprUpload = db
+        .prepare("SELECT * FROM uploads WHERE id = ?")
+        .get(cprRes.uploadId) as any;
+      expect(cprUpload.shop_id).toBe(shop1.id);
+
+      const settLine = db
+        .prepare("SELECT * FROM settlement_lines WHERE upload_id = ?")
+        .get(cprRes.uploadId) as any;
+      expect(settLine.shop_id).toBe(shop1.id);
+
+      // Querying settlement lines for shop2 yields 0 records
+      const shop2Lines = db
+        .prepare("SELECT * FROM settlement_lines WHERE org_id = ? AND shop_id = ?")
+        .all(orgAId, shop2.id);
+      expect(shop2Lines.length).toBe(0);
+    });
   });
 
   describe("4. Role Permissions & Restrictions (Staff vs Owner)", () => {
