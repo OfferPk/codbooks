@@ -17,7 +17,18 @@ export async function GET(req: NextRequest) {
       ? (agingRaw as AgingBucketKey)
       : "";
 
+    let targetShopId: string | null = null;
+    if (user.role === "staff") {
+      targetShopId = user.shop_id || null;
+    } else {
+      targetShopId = req.nextUrl.searchParams.get("shopId") || user.shop_id || null;
+    }
+
     const db = getDb();
+    const runSubquery = targetShopId
+      ? `(SELECT id FROM match_runs WHERE org_id = ? AND (shop_id = ? OR shop_id IS NULL) ORDER BY created_at DESC LIMIT 1)`
+      : `(SELECT id FROM match_runs WHERE org_id = ? ORDER BY created_at DESC LIMIT 1)`;
+
     let sql = `
       SELECT m.*, c.code as courier_code, c.name as courier_name,
              o.external_order_id, o.customer_name
@@ -25,10 +36,15 @@ export async function GET(req: NextRequest) {
       LEFT JOIN couriers c ON c.id = m.courier_id
       LEFT JOIN orders o ON o.id = m.order_id
       WHERE m.org_id = ?
-        AND m.match_run_id = (
-          SELECT id FROM match_runs WHERE org_id = ? ORDER BY created_at DESC LIMIT 1
-        )`;
-    const params: string[] = [user.org_id, user.org_id];
+        AND m.match_run_id = ${runSubquery}`;
+    const params: string[] = targetShopId
+      ? [user.org_id, user.org_id, targetShopId]
+      : [user.org_id, user.org_id];
+
+    if (targetShopId) {
+      sql += ` AND (m.shop_id = ? OR m.shop_id IS NULL)`;
+      params.push(targetShopId);
+    }
 
     // Aging contract: when aging is set and status omitted, restrict to unpaid|short
     // (same set as the Aging board). Explicit status still applies when provided.
@@ -73,24 +89,44 @@ export async function GET(req: NextRequest) {
         .slice(0, 500);
     }
 
-    const runs = db
-      .prepare(
-        `SELECT id, created_at, summary_json FROM match_runs
-         WHERE org_id = ? ORDER BY created_at DESC LIMIT 5`
-      )
-      .all(user.org_id);
-    const couriers = db
-      .prepare(
-        `SELECT DISTINCT LOWER(c.code) as code
-         FROM matches m
-         JOIN couriers c ON c.id = m.courier_id
-         WHERE m.org_id = ?
-           AND m.match_run_id = (
-             SELECT id FROM match_runs WHERE org_id = ? ORDER BY created_at DESC LIMIT 1
-           )
-         ORDER BY code`
-      )
-      .all(user.org_id, user.org_id) as Array<{ code: string }>;
+    const runs = targetShopId
+      ? db
+          .prepare(
+            `SELECT id, created_at, summary_json FROM match_runs
+             WHERE org_id = ? AND (shop_id = ? OR shop_id IS NULL) ORDER BY created_at DESC LIMIT 5`
+          )
+          .all(user.org_id, targetShopId)
+      : db
+          .prepare(
+            `SELECT id, created_at, summary_json FROM match_runs
+             WHERE org_id = ? ORDER BY created_at DESC LIMIT 5`
+          )
+          .all(user.org_id);
+
+    const couriers = targetShopId
+      ? (db
+          .prepare(
+            `SELECT DISTINCT LOWER(c.code) as code
+             FROM matches m
+             JOIN couriers c ON c.id = m.courier_id
+             WHERE m.org_id = ?
+               AND (m.shop_id = ? OR m.shop_id IS NULL)
+               AND m.match_run_id = ${runSubquery}
+             ORDER BY code`
+          )
+          .all(user.org_id, targetShopId, user.org_id, targetShopId) as Array<{
+          code: string;
+        }>)
+      : (db
+          .prepare(
+            `SELECT DISTINCT LOWER(c.code) as code
+             FROM matches m
+             JOIN couriers c ON c.id = m.courier_id
+             WHERE m.org_id = ?
+               AND m.match_run_id = ${runSubquery}
+             ORDER BY code`
+          )
+          .all(user.org_id, user.org_id) as Array<{ code: string }>);
     return NextResponse.json({
       matches: rows,
       runs,

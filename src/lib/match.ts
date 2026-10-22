@@ -21,6 +21,7 @@ interface OrderRow {
   ordered_at: string | null;
   status: string | null;
   courier_id: string | null;
+  shop_id: string | null;
 }
 
 interface SettlementRow {
@@ -32,6 +33,7 @@ interface SettlementRow {
   remitted_paisa: number;
   settled_at: string | null;
   delivery_status: string | null;
+  shop_id: string | null;
 }
 
 
@@ -57,7 +59,11 @@ function resolveRemitted(expected: number, remitted: number): number {
   return remitted;
 }
 
-export function runMatch(orgId: string, userId: string): {
+export function runMatch(
+  orgId: string,
+  userId: string,
+  shopId?: string | null
+): {
   matchRunId: string;
   summary: MatchSummary;
 } {
@@ -65,25 +71,39 @@ export function runMatch(orgId: string, userId: string): {
   const now = new Date().toISOString();
   const matchRunId = crypto.randomUUID();
 
-  const orders = db
-    .prepare(
-      `SELECT id, external_order_id, awb, cn, order_amount_paisa, ordered_at, status, courier_id
-       FROM orders WHERE org_id = ?`
-    )
-    .all(orgId) as OrderRow[];
+  const orders = shopId
+    ? (db
+        .prepare(
+          `SELECT id, external_order_id, awb, cn, order_amount_paisa, ordered_at, status, courier_id, shop_id
+           FROM orders WHERE org_id = ? AND (shop_id = ? OR shop_id IS NULL)`
+        )
+        .all(orgId, shopId) as OrderRow[])
+    : (db
+        .prepare(
+          `SELECT id, external_order_id, awb, cn, order_amount_paisa, ordered_at, status, courier_id, shop_id
+           FROM orders WHERE org_id = ?`
+        )
+        .all(orgId) as OrderRow[]);
 
-  const settlements = db
-    .prepare(
-      `SELECT id, courier_id, awb, cn, order_ref, remitted_paisa, settled_at, delivery_status
-       FROM settlement_lines WHERE org_id = ?`
-    )
-    .all(orgId) as SettlementRow[];
+  const settlements = shopId
+    ? (db
+        .prepare(
+          `SELECT id, courier_id, awb, cn, order_ref, remitted_paisa, settled_at, delivery_status, shop_id
+           FROM settlement_lines WHERE org_id = ? AND (shop_id = ? OR shop_id IS NULL)`
+        )
+        .all(orgId, shopId) as SettlementRow[])
+    : (db
+        .prepare(
+          `SELECT id, courier_id, awb, cn, order_ref, remitted_paisa, settled_at, delivery_status, shop_id
+           FROM settlement_lines WHERE org_id = ?`
+        )
+        .all(orgId) as SettlementRow[]);
 
   // Ensure shipments exist for each order
   const ensureShip = db.prepare(
     `INSERT INTO shipments
-      (id, org_id, order_id, awb, cn, courier_id, status, cod_amount_paisa, shipped_at, delivered_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      (id, org_id, shop_id, order_id, awb, cn, courier_id, status, cod_amount_paisa, shipped_at, delivered_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const findShipByOrder = db.prepare(
     `SELECT id FROM shipments WHERE org_id = ? AND order_id = ?`
@@ -107,6 +127,7 @@ export function runMatch(orgId: string, userId: string): {
     ensureShip.run(
       sid,
       orgId,
+      o.shop_id || shopId || null,
       o.id,
       o.awb,
       o.cn,
@@ -166,19 +187,25 @@ export function runMatch(orgId: string, userId: string): {
 
   const insertMatch = db.prepare(
     `INSERT INTO matches
-      (id, match_run_id, org_id, shipment_id, settlement_line_id, order_id,
+      (id, match_run_id, org_id, shop_id, shipment_id, settlement_line_id, order_id,
        status, expected_paisa, remitted_paisa, short_paisa, courier_id, awb, cn, notes, reference_date)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
   db.prepare(
-    `INSERT INTO match_runs (id, org_id, created_at, created_by, summary_json)
-     VALUES (?, ?, ?, ?, ?)`
-  ).run(matchRunId, orgId, now, userId, "{}");
+    `INSERT INTO match_runs (id, org_id, shop_id, created_at, created_by, summary_json)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(matchRunId, orgId, shopId || null, now, userId, "{}");
 
   const tx = db.transaction(() => {
-    // Clear prior matches for org (latest run is source of truth for MVP)
-    db.prepare("DELETE FROM matches WHERE org_id = ?").run(orgId);
+    // Clear prior matches for shop or entire org (latest run is source of truth for MVP)
+    if (shopId) {
+      db.prepare(
+        "DELETE FROM matches WHERE org_id = ? AND (shop_id = ? OR shop_id IS NULL)"
+      ).run(orgId, shopId);
+    } else {
+      db.prepare("DELETE FROM matches WHERE org_id = ?").run(orgId);
+    }
 
     for (const s of settlements) {
       const awb = normalizeAwb(s.awb);
@@ -199,12 +226,15 @@ export function runMatch(orgId: string, userId: string): {
         matchVia = "order_id";
       }
 
+      const matchShopId = order?.shop_id || s.shop_id || shopId || null;
+
       if (key && doubleKeys.has(key) && order) {
         const remitted = resolveRemitted(order.order_amount_paisa, s.remitted_paisa);
         insertMatch.run(
           crypto.randomUUID(),
           matchRunId,
           orgId,
+          matchShopId,
           orderShipments.get(order.id) ?? null,
           s.id,
           order.id,
@@ -232,6 +262,7 @@ export function runMatch(orgId: string, userId: string): {
           crypto.randomUUID(),
           matchRunId,
           orgId,
+          matchShopId,
           null,
           s.id,
           null,
@@ -277,6 +308,7 @@ export function runMatch(orgId: string, userId: string): {
         crypto.randomUUID(),
         matchRunId,
         orgId,
+        matchShopId,
         orderShipments.get(order.id) ?? null,
         s.id,
         order.id,
@@ -312,6 +344,7 @@ export function runMatch(orgId: string, userId: string): {
         crypto.randomUUID(),
         matchRunId,
         orgId,
+        o.shop_id || shopId || null,
         orderShipments.get(o.id) ?? null,
         null,
         o.id,
@@ -338,7 +371,11 @@ export function runMatch(orgId: string, userId: string): {
     matchRunId
   );
 
-  audit(orgId, userId, "match_run", { match_run_id: matchRunId, summary });
+  audit(orgId, userId, "match_run", {
+    match_run_id: matchRunId,
+    shop_id: shopId || null,
+    summary,
+  });
 
   return { matchRunId, summary };
 }

@@ -3,6 +3,7 @@
 # Safe online backup using SQLite .backup with integrity verification
 
 set -eu
+umask 077
 
 DB_PATH="${DATABASE_PATH:-/app/data/codbooks.db}"
 BACKUP_DIR="${BACKUP_DIR:-/app/data/backups}"
@@ -11,6 +12,7 @@ DATE_TAG=$(date +"%Y%m%d_%H%M%S")
 BACKUP_FILE="${BACKUP_DIR}/codbooks_backup_${DATE_TAG}.db"
 
 mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
 
 if [ ! -f "$DB_PATH" ]; then
   echo "[ERROR] Database not found at $DB_PATH" >&2
@@ -28,6 +30,7 @@ fi
 
 # 2. Perform safe hot atomic backup via sqlite3
 sqlite3 "$DB_PATH" ".backup '$BACKUP_FILE'"
+chmod 600 "$BACKUP_FILE"
 
 # 3. Verify backup file integrity
 BACKUP_INTEGRITY=$(sqlite3 "$BACKUP_FILE" "PRAGMA integrity_check;" 2>&1 || true)
@@ -41,6 +44,7 @@ fi
 if command -v sha256sum >/dev/null 2>&1; then
   CHECKSUM=$(sha256sum "$BACKUP_FILE" | awk '{print $1}')
   echo "$CHECKSUM  $(basename "$BACKUP_FILE")" > "${BACKUP_FILE}.sha256"
+  chmod 600 "${BACKUP_FILE}.sha256"
 fi
 
 SIZE=$(ls -lh "$BACKUP_FILE" | awk '{print $5}')

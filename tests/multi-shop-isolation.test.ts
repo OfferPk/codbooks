@@ -422,4 +422,192 @@ describe("Multi-Shop Support & Role Isolation (Issue #6)", () => {
       expect(body.error).toContain("Role must be ops, accountant, or staff");
     });
   });
+
+  describe("6. Cross-Shop Reconciliation Isolation & Export Scoping (Issue #21)", () => {
+    it("scopes runMatch to designated shop without deleting other shops matches", async () => {
+      const { runMatch } = await import("@/lib/match");
+      const db = getDb();
+
+      const shopAlpha = createShop(orgAId, "Alpha Store", "ALPHA", false);
+      const shopBeta = createShop(orgAId, "Beta Store", "BETA", false);
+      const now = new Date().toISOString();
+
+      const courierRow = db
+        .prepare("SELECT id FROM couriers WHERE code = 'tcs'")
+        .get() as { id: string } | undefined;
+      const courierId = courierRow
+        ? courierRow.id
+        : (() => {
+            const id = "courier_tcs";
+            db.prepare("INSERT INTO couriers (id, code, name) VALUES (?, 'tcs', 'TCS')").run(id);
+            return id;
+          })();
+
+      // 1. Create orders & settlements for shopAlpha
+      const oAlphaId = crypto.randomUUID();
+      db.prepare(
+        `INSERT INTO orders (id, org_id, shop_id, external_order_id, awb, customer_name, order_amount_paisa, created_at)
+         VALUES (?, ?, ?, 'ORD-ALPHA-1', 'AWB-ALPHA-1', 'Alpha Cust', 250000, ?)`
+      ).run(oAlphaId, orgAId, shopAlpha.id, now);
+
+      const upAlphaId = crypto.randomUUID();
+      db.prepare(
+        `INSERT INTO uploads (id, org_id, shop_id, kind, filename, storage_key, uploaded_by, status, created_at)
+         VALUES (?, ?, ?, 'cpr', 'alpha.csv', 'key_alpha', ?, 'completed', ?)`
+      ).run(upAlphaId, orgAId, shopAlpha.id, ownerAId, now);
+
+      const settAlphaId = crypto.randomUUID();
+      db.prepare(
+        `INSERT INTO settlement_lines (id, org_id, shop_id, upload_id, courier_id, awb, remitted_paisa, settled_at, created_at)
+         VALUES (?, ?, ?, ?, ?, 'AWB-ALPHA-1', 250000, ?, ?)`
+      ).run(settAlphaId, orgAId, shopAlpha.id, upAlphaId, courierId, now, now);
+
+      // 2. Create orders & settlements for shopBeta
+      const oBetaId = crypto.randomUUID();
+      db.prepare(
+        `INSERT INTO orders (id, org_id, shop_id, external_order_id, awb, customer_name, order_amount_paisa, created_at)
+         VALUES (?, ?, ?, 'ORD-BETA-1', 'AWB-BETA-1', 'Beta Cust', 400000, ?)`
+      ).run(oBetaId, orgAId, shopBeta.id, now);
+
+      const upBetaId = crypto.randomUUID();
+      db.prepare(
+        `INSERT INTO uploads (id, org_id, shop_id, kind, filename, storage_key, uploaded_by, status, created_at)
+         VALUES (?, ?, ?, 'cpr', 'beta.csv', 'key_beta', ?, 'completed', ?)`
+      ).run(upBetaId, orgAId, shopBeta.id, ownerAId, now);
+
+      const settBetaId = crypto.randomUUID();
+      db.prepare(
+        `INSERT INTO settlement_lines (id, org_id, shop_id, upload_id, courier_id, awb, remitted_paisa, fee_delivery_paisa, settled_at, created_at)
+         VALUES (?, ?, ?, ?, ?, 'AWB-BETA-1', 400000, 20000, ?, ?)`
+      ).run(settBetaId, orgAId, shopBeta.id, upBetaId, courierId, now, now);
+
+      // Run match for shopAlpha only
+      const resAlpha = runMatch(orgAId, ownerAId, shopAlpha.id);
+      expect(resAlpha.summary.matched).toBe(1);
+
+      // Verify shop_id is recorded in match_runs and matches
+      const runAlphaRow = db
+        .prepare("SELECT * FROM match_runs WHERE id = ?")
+        .get(resAlpha.matchRunId) as any;
+      expect(runAlphaRow.shop_id).toBe(shopAlpha.id);
+
+      const alphaMatches = db
+        .prepare("SELECT * FROM matches WHERE match_run_id = ?")
+        .all(resAlpha.matchRunId) as any[];
+      expect(alphaMatches.length).toBe(1);
+      expect(alphaMatches[0].shop_id).toBe(shopAlpha.id);
+      expect(alphaMatches[0].awb).toBe("AWB-ALPHA-1");
+
+      // Run match for shopBeta only
+      const resBeta = runMatch(orgAId, ownerAId, shopBeta.id);
+      expect(resBeta.summary.matched).toBe(1);
+
+      const betaMatches = db
+        .prepare("SELECT * FROM matches WHERE match_run_id = ?")
+        .all(resBeta.matchRunId) as any[];
+      expect(betaMatches.length).toBe(1);
+      expect(betaMatches[0].shop_id).toBe(shopBeta.id);
+      expect(betaMatches[0].awb).toBe("AWB-BETA-1");
+
+      // Verify that shopAlpha's matches were NOT deleted by shopBeta's match run!
+      const remainingAlphaMatches = db
+        .prepare("SELECT * FROM matches WHERE org_id = ? AND shop_id = ?")
+        .all(orgAId, shopAlpha.id) as any[];
+      expect(remainingAlphaMatches.length).toBe(1);
+    });
+
+    it("restricts GET /api/matches to user.shop_id when role is staff", async () => {
+      const getMatches = (await import("@/app/api/matches/route")).GET;
+      const { NextRequest } = await import("next/server");
+      const db = getDb();
+
+      const shopGamma = createShop(orgAId, "Gamma Shop", "GAM", false);
+      const staffUser = crypto.randomUUID();
+      const staffSession = crypto.randomUUID();
+      const now = new Date().toISOString();
+
+      db.prepare(
+        `INSERT INTO users (id, email, password_hash, name, created_at) VALUES (?, 'staff-gamma@test.local', 'hash', 'Gamma Staff', ?)`
+      ).run(staffUser, now);
+      db.prepare(
+        `INSERT INTO memberships (id, org_id, user_id, role) VALUES (?, ?, ?, 'staff')`
+      ).run(crypto.randomUUID(), orgAId, staffUser);
+
+      const expires = new Date();
+      expires.setDate(expires.getDate() + 7);
+      db.prepare(
+        `INSERT INTO sessions (id, user_id, org_id, active_shop_id, expires_at) VALUES (?, ?, ?, ?, ?)`
+      ).run(staffSession, staffUser, orgAId, shopGamma.id, expires.toISOString());
+
+      // Insert match for shopGamma
+      const runGammaId = crypto.randomUUID();
+      db.prepare(
+        `INSERT INTO match_runs (id, org_id, shop_id, created_at, created_by, summary_json) VALUES (?, ?, ?, ?, ?, '{}')`
+      ).run(runGammaId, orgAId, shopGamma.id, now, staffUser);
+
+      db.prepare(
+        `INSERT INTO matches (id, match_run_id, org_id, shop_id, status, expected_paisa, remitted_paisa, awb, reference_date)
+         VALUES (?, ?, ?, ?, 'matched', 100000, 100000, 'AWB-GAMMA-ONLY', ?)`
+      ).run(crypto.randomUUID(), runGammaId, orgAId, shopGamma.id, now);
+
+      sessionCookie = staffSession;
+      const req = new NextRequest("http://localhost/api/matches");
+      const res = await getMatches(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+
+      expect(json.matches.length).toBe(1);
+      expect(json.matches[0].awb).toBe("AWB-GAMMA-ONLY");
+      expect(json.matches[0].shop_id).toBe(shopGamma.id);
+    });
+
+    it("restricts GET /api/export/receivable and GET /api/export/fees to staff shop_id", async () => {
+      const getExportRecv = (await import("@/app/api/export/receivable/route")).GET;
+      const getExportFees = (await import("@/app/api/export/fees/route")).GET;
+      const { NextRequest } = await import("next/server");
+      const db = getDb();
+
+      const shopDelta = createShop(orgAId, "Delta Shop", "DELT", false);
+      const staffUser = crypto.randomUUID();
+      const staffSession = crypto.randomUUID();
+      const now = new Date().toISOString();
+
+      db.prepare(
+        `INSERT INTO users (id, email, password_hash, name, created_at) VALUES (?, 'staff-delta@test.local', 'hash', 'Delta Staff', ?)`
+      ).run(staffUser, now);
+      db.prepare(
+        `INSERT INTO memberships (id, org_id, user_id, role) VALUES (?, ?, ?, 'staff')`
+      ).run(crypto.randomUUID(), orgAId, staffUser);
+
+      const expires = new Date();
+      expires.setDate(expires.getDate() + 7);
+      db.prepare(
+        `INSERT INTO sessions (id, user_id, org_id, active_shop_id, expires_at) VALUES (?, ?, ?, ?, ?)`
+      ).run(staffSession, staffUser, orgAId, shopDelta.id, expires.toISOString());
+
+      const courierRow = db.prepare("SELECT id FROM couriers LIMIT 1").get() as { id: string };
+
+      // Settlement line for Delta
+      const upDeltaId = crypto.randomUUID();
+      db.prepare(
+        `INSERT INTO uploads (id, org_id, shop_id, kind, filename, storage_key, uploaded_by, status, created_at)
+         VALUES (?, ?, ?, 'cpr', 'delta.csv', 'key_delta', ?, 'completed', ?)`
+      ).run(upDeltaId, orgAId, shopDelta.id, staffUser, now);
+
+      db.prepare(
+        `INSERT INTO settlement_lines (id, org_id, shop_id, upload_id, courier_id, awb, remitted_paisa, fee_delivery_paisa, settled_at, created_at)
+         VALUES (?, ?, ?, ?, ?, 'AWB-DELTA-FEE', 150000, 18000, ?, ?)`
+      ).run(crypto.randomUUID(), orgAId, shopDelta.id, upDeltaId, courierRow.id, now, now);
+
+      sessionCookie = staffSession;
+
+      // Fees export
+      const feesReq = new NextRequest("http://localhost/api/export/fees");
+      const feesRes = await getExportFees(feesReq);
+      expect(feesRes.status).toBe(200);
+      const feesText = await feesRes.text();
+      expect(feesText).toContain("AWB-DELTA-FEE");
+      expect(feesText).not.toContain("AWB-BETA-1"); // Beta shop fee must NOT leak to Delta staff!
+    });
+  });
 });
