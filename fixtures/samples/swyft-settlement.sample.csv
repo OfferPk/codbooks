@@ -1,0 +1,4 @@
+Swyft Tracking ID,Order ID,COD Amount,Delivery Charges,Fuel Surcharge,GST,Net Payable,Consignment Status,Settlement Date,Voucher Number
+SWY-880011,ORD-SWY-201,4500,210,40,32,4218,Delivered,2026-10-16,SWY-VOUCH-88
+SWY-880012,ORD-SWY-202,2950,190,25,29,2706,Delivered,2026-10-16,SWY-VOUCH-88
+SWY-880013,ORD-SWY-203,6400,280,0,45,0,Cancelled,2026-10-16,SWY-VOUCH-88

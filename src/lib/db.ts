@@ -378,6 +378,8 @@ export function getCourierIdByCode(code: string): string | null {
     mnp: "M&P Express",
     trax: "Trax Logistics",
     callcourier: "Call Courier",
+    rider: "Rider Pakistan",
+    swyft: "Swyft Logistics",
   };
   const c = code.toLowerCase().trim();
   if (KNOWN_COURIERS[c]) {

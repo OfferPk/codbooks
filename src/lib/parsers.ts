@@ -6,28 +6,29 @@ import { parseLeopards } from "./importers/leopards";
 import { parseMnp } from "./importers/mnp";
 import { parseTrax } from "./importers/trax";
 import { parseCallCourier } from "./importers/callcourier";
-
-import { detectCourierCode } from "./importers/detect";
+import { parseRider } from "./importers/rider";
+import { parseSwyft } from "./importers/swyft";
+import { parseShopifyOrders, parseWooCommerceOrders } from "./importers/ecommerce";
+import {
+  detectTemplate,
+  detectCourierCode,
+  type DetectedTemplate,
+} from "./importers/detect";
 
 export {
   parseLeopards,
   parseMnp,
   parseTrax,
   parseCallCourier,
+  parseRider,
+  parseSwyft,
+  parseShopifyOrders,
+  parseWooCommerceOrders,
+  detectTemplate,
   detectCourierCode,
 };
 
-export type DetectedTemplate =
-  | "orders"
-  | "tcs_invoice"
-  | "tcs_detail"
-  | "postex"
-  | "postex_portal"
-  | "leopards"
-  | "mnp"
-  | "trax"
-  | "callcourier"
-  | "unknown";
+export type { DetectedTemplate };
 
 export interface ParsedOrder {
   external_order_id: string;
@@ -62,67 +63,19 @@ export interface ParsedSettlement {
   raw: Record<string, string>;
 }
 
-function headerSet(headers: string[]): Set<string> {
-  return new Set(headers.map((h) => h.toLowerCase().trim()));
-}
-
-export function detectTemplate(headers: string[]): DetectedTemplate {
-  const h = headerSet(headers);
-  if (
-    h.has("external_order_id") ||
-    (h.has("cod_amount_pkr") && (h.has("awb") || h.has("cn")))
-  ) {
-    return "orders";
-  }
-  if (h.has("cnsg_no") && h.has("codamount")) return "tcs_invoice";
-  if (
-    h.has("cn by courier") ||
-    (h.has("amount paid") && (h.has("order no") || h.has("payment status") || h.has("cn status")))
-  ) {
-    return "tcs_detail";
-  }
-  if (
-    h.has("trackingnumber") &&
-    h.has("orderrefnumber") &&
-    (h.has("amount_paid") || h.has("cod_amount") || h.has("fee_delivery"))
-  ) {
-    return "postex_portal";
-  }
-  if (h.has("trackingnumber") && h.has("settle")) return "postex";
-  if (
-    (h.has("track number") || h.has("sheet number")) &&
-    (h.has("cod amount") || h.has("net amount") || h.has("delivery charges"))
-  ) {
-    return "leopards";
-  }
-  if (
-    (h.has("voucher no") || h.has("voucher_no") || h.has("net cod") || h.has("cod value") || h.has("fed")) &&
-    (h.has("cn number") || h.has("consignment no") || h.has("order ref"))
-  ) {
-    return "mnp";
-  }
-  if (
-    h.has("trax cn") ||
-    h.has("disbursement id") ||
-    h.has("disbursement date") ||
-    h.has("cash handling fee") ||
-    (h.has("tracking number") && h.has("product amount") && h.has("service charges"))
-  ) {
-    return "trax";
-  }
-  if (
-    (h.has("bank charges") || h.has("sheet no") || h.has("sheet_no") || h.has("consignmentnumber")) &&
-    (h.has("cn number") || h.has("cn") || h.has("ref no") || h.has("balance"))
-  ) {
-    return "callcourier";
-  }
-  return "unknown";
-}
-
 export function parseOrdersCsv(text: string): {
   rows: ParsedOrder[];
   errors: string[];
 } {
+  const { headers } = parseCsv(text);
+  const detected = detectTemplate(headers);
+  if (detected === "shopify_orders") {
+    return parseShopifyOrders(text);
+  }
+  if (detected === "woocommerce_orders") {
+    return parseWooCommerceOrders(text);
+  }
+
   const { rows: raw } = parseCsv(text);
   const errors: string[] = [];
   const rows: ParsedOrder[] = [];
@@ -133,12 +86,13 @@ export function parseOrdersCsv(text: string): {
       "order_id",
       "order id",
       "order no",
-      "orderRefNumber"
+      "orderRefNumber",
+      "name"
     );
-    const awb = normalizeAwb(getField(r, "awb", "trackingNumber", "cnsg_no"));
-    const cn = normalizeCn(getField(r, "cn", "awb", "trackingNumber", "cnsg_no"));
+    const awb = normalizeAwb(getField(r, "awb", "trackingNumber", "cnsg_no", "tracking_number"));
+    const cn = normalizeCn(getField(r, "cn", "awb", "trackingNumber", "cnsg_no", "tracking_number"));
     const amount = pkrToPaisa(
-      getField(r, "cod_amount_pkr", "cod_amount", "amount", "order_amount")
+      getField(r, "cod_amount_pkr", "cod_amount", "amount", "order_amount", "total")
     );
     if (!external && !awb && !cn) {
       errors.push(`Row ${i + 2}: missing order id / AWB / CN`);
@@ -166,15 +120,19 @@ export function parseOrdersCsv(text: string): {
       courier_code = "trax";
     } else if (courierRaw.includes("callcourier") || courierRaw.includes("call courier")) {
       courier_code = "callcourier";
+    } else if (courierRaw.includes("rider")) {
+      courier_code = "rider";
+    } else if (courierRaw.includes("swyft")) {
+      courier_code = "swyft";
     }
     rows.push({
       external_order_id: normalizeOrderId(external),
       awb,
       cn: cn || awb,
-      customer_name: getField(r, "customer_name", "consignee", "customer"),
+      customer_name: getField(r, "customer_name", "consignee", "customer", "shipping name"),
       order_amount_paisa: amount,
       currency: getField(r, "currency") || "PKR",
-      ordered_at: getField(r, "ordered_at", "order_date", "date") || null,
+      ordered_at: getField(r, "ordered_at", "order_date", "date", "created at") || null,
       source: getField(r, "source") || "csv",
       status: getField(r, "status") || "shipped",
       courier_code,
@@ -368,6 +326,8 @@ export function parseSettlementByTemplate(
   if (hint === "mnp" && template === "unknown") template = "mnp";
   if (hint === "trax" && template === "unknown") template = "trax";
   if (hint === "callcourier" && template === "unknown") template = "callcourier";
+  if (hint === "rider" && template === "unknown") template = "rider";
+  if (hint === "swyft" && template === "unknown") template = "swyft";
 
   if (template === "tcs_invoice") {
     const r = parseTcsInvoice(text);
@@ -397,10 +357,20 @@ export function parseSettlementByTemplate(
     const r = parseCallCourier(text);
     return { template, courierCode: "callcourier", ...r };
   }
+  if (template === "rider") {
+    const r = parseRider(text);
+    return { template, courierCode: "rider", ...r };
+  }
+  if (template === "swyft") {
+    const r = parseSwyft(text);
+    return { template, courierCode: "swyft", ...r };
+  }
   return {
     template: "unknown",
     courierCode: null,
     rows: [],
-    errors: ["Unrecognized CPR/settlement CSV headers. Supported couriers: TCS, PostEx, Leopards, M&P, Trax, Call Courier."],
+    errors: [
+      "Unrecognized CPR/settlement CSV headers. Supported couriers: TCS, PostEx, Leopards, M&P, Trax, Call Courier, Rider, Swyft.",
+    ],
   };
 }

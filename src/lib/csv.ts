@@ -1,12 +1,12 @@
 import Papa from "papaparse";
 
-/** Strip leading # comment lines from CSV text (fixtures use them). */
+/** Strip leading # comment lines from CSV text (fixtures use '# ...'). */
 export function stripCsvComments(text: string): string {
   return text
     .split(/\r?\n/)
     .filter((line) => {
       const t = line.trim();
-      return t.length > 0 && !t.startsWith("#");
+      return t.length > 0 && !(t.startsWith("# ") || t.startsWith("##"));
     })
     .join("\n");
 }

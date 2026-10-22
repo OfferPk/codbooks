@@ -14,7 +14,9 @@ export type CourierCode =
   | "leopards"
   | "mnp"
   | "trax"
-  | "callcourier";
+  | "callcourier"
+  | "rider"
+  | "swyft";
 
 export interface Shop {
   id: string;
