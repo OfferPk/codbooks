@@ -1,8 +1,10 @@
 import { getSessionUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { getHealthSummary } from "@/lib/match";
+import { getDashboardTrends } from "@/lib/trends";
 import { formatPkr } from "@/lib/money";
 import { HealthChecklist } from "@/components/HealthChecklist";
+import { DashboardTrendsClient } from "@/components/DashboardTrendsClient";
 import Link from "next/link";
 
 export default async function HealthPage() {
@@ -10,6 +12,17 @@ export default async function HealthPage() {
   if (!user) return null;
 
   const health = getHealthSummary(user.org_id);
+  const weeklyTrends = getDashboardTrends(user.org_id, {
+    period: "weekly",
+    limit: 8,
+    shopId: user.shop_id,
+  });
+  const monthlyTrends = getDashboardTrends(user.org_id, {
+    period: "monthly",
+    limit: 6,
+    shopId: user.shop_id,
+  });
+
   const db = getDb();
   const uploadRow = db
     .prepare(`SELECT COUNT(*) as c FROM uploads WHERE org_id = ?`)
@@ -135,6 +148,12 @@ export default async function HealthPage() {
           ))}
         </div>
       </section>
+
+      {/* Settlement Trends Section */}
+      <DashboardTrendsClient
+        initialWeeklyTrends={weeklyTrends}
+        initialMonthlyTrends={monthlyTrends}
+      />
 
       <section className="card !p-0">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">
