@@ -91,6 +91,11 @@ export default function LoginPage() {
               {process.env.NODE_ENV !== "production" ? <span className="mb-2 block text-xs">Local demo accounts: see README after <code className="rounded bg-slate-100 px-1.5 py-0.5">npm run seed</code></span> : null}
               New to CodBooks? <Link href="/register" className="font-semibold text-emerald-700 hover:text-emerald-900 hover:underline">Create a seller account</Link>
             </p>
+            <div className="mt-4 flex items-center justify-center gap-3 text-xs text-slate-400">
+              <Link href="/demo" className="hover:text-slate-600 dark:hover:text-slate-300 hover:underline">Live Demo</Link>
+              <span>·</span>
+              <Link href="/pricing" className="hover:text-slate-600 dark:hover:text-slate-300 hover:underline">Pricing Plans</Link>
+            </div>
           </div>
         </section>
       </div>

@@ -12,6 +12,17 @@ export interface TranslationDictionary {
   audit: string;
   team: string;
   logOut: string;
+  pricing: string;
+  demo: string;
+  monthly: string;
+  annually: string;
+  starterPlan: string;
+  growthPlan: string;
+  scalePlan: string;
+  freeForever: string;
+  pkrPerMonth: string;
+  choosePlan: string;
+  faq: string;
   // Theme & Language
   darkMode: string;
   lightMode: string;
@@ -52,6 +63,17 @@ export const DICTIONARY: Record<Locale, TranslationDictionary> = {
     audit: "Audit",
     team: "Team",
     logOut: "Log out",
+    pricing: "Pricing",
+    demo: "Live Demo",
+    monthly: "Monthly",
+    annually: "Annually (Save 20%)",
+    starterPlan: "Starter",
+    growthPlan: "Growth Merchant",
+    scalePlan: "Scale / Multi-Shop",
+    freeForever: "Free Forever",
+    pkrPerMonth: "PKR / month",
+    choosePlan: "Get Started Free",
+    faq: "Frequently Asked Questions",
     darkMode: "Dark Mode",
     lightMode: "Light Mode",
     toggleTheme: "Toggle theme",
@@ -87,6 +109,17 @@ export const DICTIONARY: Record<Locale, TranslationDictionary> = {
     audit: "آڈٹ لاگ",
     team: "ٹیم",
     logOut: "لاگ آؤٹ",
+    pricing: "قیمتیں",
+    demo: "لائیو ڈیمو",
+    monthly: "ماہانہ",
+    annually: "سالانہ (۲۰٪ بچت)",
+    starterPlan: "اسٹارٹر",
+    growthPlan: "گروتھ مرچنٹ",
+    scalePlan: "ملٹی شاپ اسکیل",
+    freeForever: "ہمیشہ مفت",
+    pkrPerMonth: "روپے فی مہینہ",
+    choosePlan: "ابھی شروع کریں",
+    faq: "اکثر پوچھے گئے سوالات",
     darkMode: "ڈارک موڈ",
     lightMode: "لائٹ موڈ",
     toggleTheme: "تھیم تبدیل کریں",
