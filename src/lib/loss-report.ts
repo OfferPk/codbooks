@@ -8,7 +8,8 @@ export type LossCategory =
   | "short_payment"
   | "double_charged_fee"
   | "return_marked_delivered"
-  | "held_payment";
+  | "held_payment"
+  | "excess_fee_overcharge";
 
 export type HeldBucket = "7-13" | "14-29" | "30+";
 
@@ -211,7 +212,6 @@ export function detectDoubleChargedFees(params: {
   for (const [key, list] of byTrackingKey.entries()) {
     const linesWithDeliveryFee = list.filter((s) => s.fee_delivery_paisa > 0);
     if (linesWithDeliveryFee.length > 1) {
-      // First line is legitimate fee, subsequent lines are double-charged
       for (let i = 1; i < linesWithDeliveryFee.length; i++) {
         const dup = linesWithDeliveryFee[i];
         const courierCode = dup.courier_code || "unknown";
@@ -241,59 +241,62 @@ export function detectDoubleChargedFees(params: {
           reason: `Duplicate delivery fee of ${formatPkr(dup.fee_delivery_paisa)} charged multiple times (${linesWithDeliveryFee.length}x) on tracking ${dup.awb || dup.cn || key}`,
           details: {
             settlementId: dup.settlement_id,
-            firstSettlementId: linesWithDeliveryFee[0].settlement_id,
-            duplicateIndex: i + 1,
-            totalOccurrences: linesWithDeliveryFee.length,
-          },
-        });
-      }
-    }
-
-    // 2) Return fee charged on successfully delivered parcel
-    for (const s of list) {
-      const isDelivered =
-        /delivered|ok|complete/i.test(s.delivery_status || "") ||
-        (s.remitted_paisa > 0 && !/return|rto|ro/i.test(s.delivery_status || ""));
-
-      if (isDelivered && s.fee_return_paisa > 0) {
-        const courierCode = s.courier_code || "unknown";
-        const courierName = s.courier_name || courierCode.toUpperCase();
-        const o =
-          orderMapByAwb.get(key) ||
-          orderMapByCn.get(key) ||
-          orderMapByRef.get(key);
-
-        items.push({
-          id: `deliv_return_fee_${s.id}`,
-          category: "double_charged_fee",
-          courier_code: courierCode,
-          courier_name: courierName,
-          order_id: o?.id || null,
-          external_order_id: o?.external_order_id || s.order_ref || null,
-          awb: s.awb || o?.awb || null,
-          cn: s.cn || o?.cn || null,
-          customer_name: o?.customer_name || null,
-          expected_paisa: 0,
-          remitted_paisa: s.remitted_paisa,
-          loss_paisa: s.fee_return_paisa,
-          loss_pkr: paisaToPkr(s.fee_return_paisa),
-          reference_date: s.settled_at || null,
-          days_held: null,
-          held_bucket: null,
-          reason: `Invalid return fee of ${formatPkr(s.fee_return_paisa)} deducted on delivered shipment`,
-          details: {
-            deliveryStatus: s.delivery_status,
-            feeReturnPaisa: s.fee_return_paisa,
+            firstLineId: linesWithDeliveryFee[0].id,
+            duplicateLineId: dup.id,
           },
         });
       }
     }
   }
 
+  // 2) Return fee charged on successfully delivered parcel
+  for (const s of params.settlements) {
+    const status = (s.delivery_status || "").toLowerCase();
+    const isDelivered = /delivered|complete|ok|success/i.test(status);
+    if (isDelivered && s.fee_return_paisa > 0) {
+      const courierCode = s.courier_code || "unknown";
+      const courierName = s.courier_name || courierCode.toUpperCase();
+      const key =
+        (s.awb && s.awb.trim().toLowerCase()) ||
+        (s.cn && s.cn.trim().toLowerCase()) ||
+        (s.order_ref && s.order_ref.trim().toLowerCase()) ||
+        "";
+      const o = key
+        ? orderMapByAwb.get(key) ||
+          orderMapByCn.get(key) ||
+          orderMapByRef.get(key)
+        : undefined;
+
+      items.push({
+        id: `invalid_return_fee_${s.id}`,
+        category: "double_charged_fee",
+        courier_code: courierCode,
+        courier_name: courierName,
+        order_id: o?.id || null,
+        external_order_id: o?.external_order_id || s.order_ref || null,
+        awb: s.awb || o?.awb || null,
+        cn: s.cn || o?.cn || null,
+        customer_name: o?.customer_name || null,
+        expected_paisa: 0,
+        remitted_paisa: s.remitted_paisa,
+        loss_paisa: s.fee_return_paisa,
+        loss_pkr: paisaToPkr(s.fee_return_paisa),
+        reference_date: s.settled_at || null,
+        days_held: null,
+        held_bucket: null,
+        reason: `Invalid return fee of ${formatPkr(s.fee_return_paisa)} deducted on delivered shipment`,
+        details: {
+          settlementId: s.settlement_id,
+          deliveryStatus: s.delivery_status,
+        },
+      });
+    }
+  }
+
   return items;
 }
 
-/** Rule 3: Detect Returns Marked Delivered / Delivery Status Discrepancies */
+/** Rule 3: Detect Return vs Delivered Status Discrepancies */
 export function detectReturnsMarkedDelivered(params: {
   orders: OrderInput[];
   settlements: SettlementInput[];
@@ -332,12 +335,11 @@ export function detectReturnsMarkedDelivered(params: {
     const orderStatus = (o.status || "").toLowerCase();
     const settStatus = (s.delivery_status || "").toLowerCase();
 
-    // Discrepancy Case A: Order marked Return/RTO by merchant, but Courier says Delivered
+    // Case A: Order marked Return/RTO by merchant, but Courier says Delivered
     const orderIsRto = /return|rto|ro|canceled|cancelled/i.test(orderStatus);
     const settIsDelivered = /delivered|ok|complete/i.test(settStatus);
 
     if (orderIsRto && settIsDelivered) {
-      // Discrepancy: Courier says Delivered (implies customer paid cash), but remitted 0 or less
       const lossPaisa =
         s.remitted_paisa === 0
           ? o.order_amount_paisa
@@ -370,7 +372,7 @@ export function detectReturnsMarkedDelivered(params: {
       }
     }
 
-    // Discrepancy Case B: Courier marked Delivered, but remitted 0 COD on a COD order
+    // Case B: Courier marked Delivered, but remitted 0 COD on a COD order
     if (
       settIsDelivered &&
       s.remitted_paisa === 0 &&
@@ -419,26 +421,24 @@ export function detectHeldPayments(params: {
   }
 
   for (const m of params.matches) {
-    if (m.status !== "unpaid" || m.expected_paisa <= TOLERANCE_PAISA) continue;
-
-    const o = m.order_id ? orderMap.get(m.order_id) : undefined;
-    const refDate = m.reference_date || o?.ordered_at;
+    if (m.status !== "unpaid" && m.status !== "short") continue;
+    const refDate = m.reference_date || (m.order_id ? orderMap.get(m.order_id)?.ordered_at : null);
     if (!refDate) continue;
 
     const days = daysBetween(refDate, asOf);
     const bucket = classifyHeldDays(days);
-    if (!bucket) continue; // Under 7 days is within normal settlement SLA
+    if (!bucket) continue;
 
+    const o = m.order_id ? orderMap.get(m.order_id) : undefined;
     const courierCode = m.courier_code || o?.courier_code || "unknown";
-    const courierName =
-      m.courier_name || o?.courier_name || courierCode.toUpperCase();
+    const courierName = m.courier_name || o?.courier_name || courierCode.toUpperCase();
 
     const bucketLabel =
       bucket === "7-13"
-        ? "Held 7+ days (Over SLA)"
+        ? "7–13 days overdue"
         : bucket === "14-29"
-          ? "Held 14+ days (Severely Delayed)"
-          : "Held 30+ days (Critical Default Risk)";
+        ? "14–29 days overdue"
+        : "30+ days overdue (Critical)";
 
     items.push({
       id: `held_${m.id}`,
@@ -469,6 +469,96 @@ export function detectHeldPayments(params: {
   return items;
 }
 
+/** Rule 5: Detect Delivery Weight Overcharges & Excessive Cash Handling Fees */
+export function detectExcessFeeOvercharges(params: {
+  settlements: SettlementInput[];
+  orders?: OrderInput[];
+}): LossItem[] {
+  const items: LossItem[] = [];
+  const orderMap = new Map<string, OrderInput>();
+  if (params.orders) {
+    for (const o of params.orders) {
+      if (o.awb) orderMap.set(o.awb.trim().toLowerCase(), o);
+      if (o.cn) orderMap.set(o.cn.trim().toLowerCase(), o);
+      if (o.external_order_id) orderMap.set(o.external_order_id.trim().toLowerCase(), o);
+    }
+  }
+
+  for (const s of params.settlements) {
+    const courierCode = s.courier_code || "unknown";
+    const courierName = s.courier_name || courierCode.toUpperCase();
+    const key = (s.awb || s.cn || s.order_ref || "").trim().toLowerCase();
+    const o = key ? orderMap.get(key) : undefined;
+
+    // Delivery fee threshold: standard e-commerce delivery in PK is PKR 150-250.
+    // Unexplained delivery fee > PKR 400 (40000 paisa) indicates arbitrary weight surcharge.
+    const STANDARD_FEE_MAX_PAISA = 40000; // PKR 400
+    if (s.fee_delivery_paisa > STANDARD_FEE_MAX_PAISA) {
+      const overchargePaisa = s.fee_delivery_paisa - STANDARD_FEE_MAX_PAISA;
+      items.push({
+        id: `overcharge_deliv_${s.id}`,
+        category: "excess_fee_overcharge",
+        courier_code: courierCode,
+        courier_name: courierName,
+        order_id: o?.id || null,
+        external_order_id: o?.external_order_id || s.order_ref || null,
+        awb: s.awb || o?.awb || null,
+        cn: s.cn || o?.cn || null,
+        customer_name: o?.customer_name || null,
+        expected_paisa: 0,
+        remitted_paisa: s.remitted_paisa,
+        loss_paisa: overchargePaisa,
+        loss_pkr: paisaToPkr(overchargePaisa),
+        reference_date: s.settled_at || null,
+        days_held: null,
+        held_bucket: null,
+        reason: `Excessive delivery/freight charge: ${formatPkr(s.fee_delivery_paisa)} exceeds standard PKR 400.00 ceiling by ${formatPkr(overchargePaisa)}`,
+        details: {
+          deliveryFee: s.fee_delivery_paisa,
+          settlementLineId: s.id,
+        },
+      });
+    }
+
+    // Cash handling fee threshold: standard contractual cap is 2.5%.
+    if (s.fee_cash_handling_paisa && s.fee_cash_handling_paisa > 6000) {
+      const codBase = s.remitted_paisa > 0 ? s.remitted_paisa : (o?.order_amount_paisa || 0);
+      if (codBase > 0) {
+        const allowedFee = Math.round(codBase * 0.025);
+        if (s.fee_cash_handling_paisa > allowedFee + 2000) {
+          const excessPaisa = s.fee_cash_handling_paisa - allowedFee;
+          items.push({
+            id: `overcharge_cash_${s.id}`,
+            category: "excess_fee_overcharge",
+            courier_code: courierCode,
+            courier_name: courierName,
+            order_id: o?.id || null,
+            external_order_id: o?.external_order_id || s.order_ref || null,
+            awb: s.awb || o?.awb || null,
+            cn: s.cn || o?.cn || null,
+            customer_name: o?.customer_name || null,
+            expected_paisa: 0,
+            remitted_paisa: s.remitted_paisa,
+            loss_paisa: excessPaisa,
+            loss_pkr: paisaToPkr(excessPaisa),
+            reference_date: s.settled_at || null,
+            days_held: null,
+            held_bucket: null,
+            reason: `Excessive cash handling deduction: ${formatPkr(s.fee_cash_handling_paisa)} exceeds 2.5% SLA cap (${formatPkr(allowedFee)}) by ${formatPkr(excessPaisa)}`,
+            details: {
+              cashHandlingFee: s.fee_cash_handling_paisa,
+              codBase,
+              settlementLineId: s.id,
+            },
+          });
+        }
+      }
+    }
+  }
+
+  return items;
+}
+
 /** Pure Aggregator: compile all detection items into summary and courier totals */
 export function compileLossReport(
   items: LossItem[],
@@ -485,6 +575,7 @@ export function compileLossReport(
     double_charged_fee: emptyCategoryTotals(),
     return_marked_delivered: emptyCategoryTotals(),
     held_payment: emptyCategoryTotals(),
+    excess_fee_overcharge: emptyCategoryTotals(),
   };
 
   const byCourier: Record<string, CourierTotals> = {};
@@ -495,9 +586,11 @@ export function compileLossReport(
 
     // By category
     const cat = byCategory[item.category];
-    cat.count++;
-    cat.loss_paisa += item.loss_paisa;
-    cat.loss_pkr = paisaToPkr(cat.loss_paisa);
+    if (cat) {
+      cat.count++;
+      cat.loss_paisa += item.loss_paisa;
+      cat.loss_pkr = paisaToPkr(cat.loss_paisa);
+    }
 
     // By courier
     const code = item.courier_code || "unknown";
@@ -513,6 +606,7 @@ export function compileLossReport(
           double_charged_fee: emptyCategoryTotals(),
           return_marked_delivered: emptyCategoryTotals(),
           held_payment: emptyCategoryTotals(),
+          excess_fee_overcharge: emptyCategoryTotals(),
         },
       };
     }
@@ -523,9 +617,11 @@ export function compileLossReport(
     c.total_issues++;
 
     const cCat = c.by_category[item.category];
-    cCat.count++;
-    cCat.loss_paisa += item.loss_paisa;
-    cCat.loss_pkr = paisaToPkr(cCat.loss_paisa);
+    if (cCat) {
+      cCat.count++;
+      cCat.loss_paisa += item.loss_paisa;
+      cCat.loss_pkr = paisaToPkr(cCat.loss_paisa);
+    }
   }
 
   return {
@@ -570,12 +666,12 @@ export function getLossReport(
           `SELECT m.*, c.code as courier_code, c.name as courier_name
            FROM matches m
            LEFT JOIN couriers c ON c.id = m.courier_id
-           WHERE m.org_id = ? AND m.match_run_id = ? AND m.shop_id = ?`
+           WHERE m.org_id = ? AND m.match_run_id = ? AND (m.shop_id = ? OR m.shop_id IS NULL)`
         )
         .all(orgId, latestRun.id, shopId) as MatchInput[];
     }
   } else {
-    // Org-level: select matches from the latest match run of each shop
+    // Org-level: select latest match run per shop using window functions
     matches = db
       .prepare(
         `SELECT m.*, c.code as courier_code, c.name as courier_name
@@ -652,7 +748,7 @@ export function getLossReport(
     }
   }
 
-  // Run the 4 detection rules
+  // Run the 5 detection rules
   const shortItems = detectShortPayments({ matches, orders, settlements });
   const doubleFeeItems = detectDoubleChargedFees({ settlements, orders });
   const returnDiscrepancyItems = detectReturnsMarkedDelivered({
@@ -661,61 +757,63 @@ export function getLossReport(
     matches,
   });
   const heldItems = detectHeldPayments({ matches, orders, asOf: asOfDate });
+  const excessFeeItems = detectExcessFeeOvercharges({ settlements, orders });
 
   const allItems: LossItem[] = [
     ...shortItems,
     ...doubleFeeItems,
     ...returnDiscrepancyItems,
     ...heldItems,
+    ...excessFeeItems,
   ];
 
   return compileLossReport(allItems, asOfDate);
 }
 
-/** CSV Exporter for Loss Report */
+/** CSV Export for Loss Report */
 export function exportLossReportCsv(items: LossItem[]): string {
-  const headers = [
+  const CATEGORY_LABELS: Record<LossCategory, string> = {
+    short_payment: "Short Payment",
+    double_charged_fee: "Double-Charged Fee",
+    return_marked_delivered: "Return vs Delivered Discrepancy",
+    held_payment: "Held Payment",
+    excess_fee_overcharge: "Excess Fee / Overcharge",
+  };
+
+  const header = [
     "Category",
     "Courier",
     "Order ID",
     "Tracking AWB",
-    "CN",
+    "Consignment No",
     "Customer Name",
     "Reference Date",
     "Days Held",
-    "Expected COD (PKR)",
+    "Expected (PKR)",
     "Remitted (PKR)",
-    "Loss / Dispute (PKR)",
-    "Dispute Reason",
+    "Claim Amount (PKR)",
+    "Reason",
   ];
 
-  const categoryLabels: Record<LossCategory, string> = {
-    short_payment: "Short Payment",
-    double_charged_fee: "Double-Charged Fee",
-    return_marked_delivered: "Return vs Delivered Discrepancy",
-    held_payment: "Payment Held Over SLA",
-  };
-
-  const lines = [csvLine(headers)];
+  const lines = [csvLine(header)];
 
   for (const item of items) {
-    lines.push(
-      csvLine([
-        categoryLabels[item.category] || item.category,
-        item.courier_name || item.courier_code.toUpperCase(),
-        item.external_order_id || "",
-        item.awb || "",
-        item.cn || "",
-        item.customer_name || "",
-        item.reference_date ? item.reference_date.substring(0, 10) : "",
-        item.days_held !== null ? item.days_held : "",
-        paisaToPkr(item.expected_paisa).toFixed(2),
-        paisaToPkr(item.remitted_paisa).toFixed(2),
-        item.loss_pkr.toFixed(2),
-        item.reason,
-      ])
-    );
+    const row = [
+      CATEGORY_LABELS[item.category] || item.category,
+      item.courier_name,
+      item.external_order_id || "",
+      item.awb || "",
+      item.cn || "",
+      item.customer_name || "",
+      item.reference_date ? item.reference_date.substring(0, 10) : "",
+      item.days_held !== null ? String(item.days_held) : "",
+      item.expected_paisa > 0 ? (item.expected_paisa / 100).toFixed(2) : "",
+      item.remitted_paisa > 0 ? (item.remitted_paisa / 100).toFixed(2) : "0.00",
+      item.loss_pkr.toFixed(2),
+      item.reason,
+    ];
+    lines.push(csvLine(row));
   }
 
-  return lines.join("\r\n");
+  return lines.join("\n");
 }

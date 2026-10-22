@@ -41,6 +41,11 @@ const CATEGORY_META: Record<
     badgeClass: "bg-orange-100 text-orange-900 border-orange-200",
     description: "Unpaid COD held 7, 14, or 30+ days beyond settlement SLA",
   },
+  excess_fee_overcharge: {
+    label: "Fee Overcharge",
+    badgeClass: "bg-blue-100 text-blue-900 border-blue-200",
+    description: "Freight exceeding standard PKR 400 ceiling or cash handling fee over 2.5%",
+  },
 };
 
 export function LossReportClient() {
@@ -257,7 +262,7 @@ export function LossReportClient() {
       </div>
 
       {/* KPI Cards: Totals in PKR */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
         {/* Total Disputed Loss */}
         <div className="card border-sky-200 bg-sky-50/50">
           <p className="text-xs font-semibold uppercase tracking-wider text-sky-800">
@@ -334,6 +339,22 @@ export function LossReportClient() {
           </p>
           <p className="mt-1 text-xs text-slate-500">Overdue unpaid cash</p>
         </div>
+
+        {/* Fee Overcharges */}
+        <div className="card border-blue-200 bg-blue-50/30">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wider text-blue-800">
+              Fee Overcharges
+            </p>
+            <span className="badge bg-blue-100 text-blue-800 text-[10px]">
+              {data.by_category.excess_fee_overcharge?.count || 0} pcs
+            </span>
+          </div>
+          <p className="mt-2 text-xl font-bold text-slate-900">
+            {formatMoney(data.by_category.excess_fee_overcharge?.loss_pkr || 0)}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">Weight &amp; cash handling</p>
+        </div>
       </div>
 
       {/* Courier Breakdown Row */}
@@ -385,6 +406,12 @@ export function LossReportClient() {
                         {formatMoney(c.by_category.held_payment.loss_pkr)} ({c.by_category.held_payment.count})
                       </span>
                     </div>
+                    <div className="flex justify-between">
+                      <span>Fee Overcharges:</span>
+                      <span className="font-medium">
+                        {formatMoney(c.by_category.excess_fee_overcharge?.loss_pkr || 0)} ({c.by_category.excess_fee_overcharge?.count || 0})
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -414,6 +441,7 @@ export function LossReportClient() {
               { id: "double_charged_fee", label: "Double Fees" },
               { id: "return_marked_delivered", label: "Return vs Delivered" },
               { id: "held_payment", label: "Held COD" },
+              { id: "excess_fee_overcharge", label: "Fee Overcharges" },
             ].map((cat) => (
               <button
                 key={cat.id}
@@ -628,6 +656,7 @@ export function LossReportClient() {
                     Return / Delivered Discrepancies
                   </option>
                   <option value="held_payment">Overdue Held COD Only</option>
+                  <option value="excess_fee_overcharge">Fee Overcharges Only</option>
                 </select>
               </div>
             </div>
@@ -702,7 +731,9 @@ export function LossReportClient() {
                       ) : (
                         <>
                           <a
-                            href={`mailto:?subject=${encodeURIComponent(
+                            href={`mailto:${encodeURIComponent(
+                              complaintDraft.recipient_email || ""
+                            )}?subject=${encodeURIComponent(
                               complaintDraft.subject
                             )}&body=${encodeURIComponent(complaintDraft.body)}`}
                             className="btn btn-secondary text-xs py-1 inline-flex items-center gap-1"
@@ -726,6 +757,16 @@ export function LossReportClient() {
                       )}
                     </div>
                   </div>
+
+                  {complaintDraft.recipient_email && (
+                    <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs text-sky-900">
+                      <span className="font-semibold">Official Dispute Desk:</span>
+                      <span>{complaintDraft.recipient_desk || complaintDraft.courier_name}</span>
+                      <span className="font-mono text-sky-700 font-semibold underline">
+                        &lt;{complaintDraft.recipient_email}&gt;
+                      </span>
+                    </div>
+                  )}
 
                   {copyFeedback && (
                     <div className="rounded-md bg-emerald-50 p-2 text-xs font-semibold text-emerald-800 border border-emerald-200">
