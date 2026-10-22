@@ -101,6 +101,11 @@ export default function RegisterPage() {
               </button>
             </form>
             <p className="mt-6 text-center text-sm text-slate-500">Already have an account? <Link href="/login" className="font-semibold text-emerald-700 hover:text-emerald-900 hover:underline">Sign in</Link></p>
+            <div className="mt-4 flex items-center justify-center gap-3 text-xs text-slate-400">
+              <Link href="/demo" className="hover:text-slate-600 dark:hover:text-slate-300 hover:underline">Live Demo</Link>
+              <span>·</span>
+              <Link href="/pricing" className="hover:text-slate-600 dark:hover:text-slate-300 hover:underline">Pricing Plans</Link>
+            </div>
           </div>
         </section>
       </div>
