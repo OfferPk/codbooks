@@ -4,6 +4,7 @@ import {
   detectDoubleChargedFees,
   detectReturnsMarkedDelivered,
   detectHeldPayments,
+  detectExcessFeeOvercharges,
   compileLossReport,
   exportLossReportCsv,
   classifyHeldDays,
@@ -15,6 +16,8 @@ import {
   buildCourierComplaint,
   buildWhatsAppShareUrl,
   getPrintableDisputeSummary,
+  COURIER_DISPUTE_EMAILS,
+  getCourierDisputeContact,
 } from "@/lib/loss-complaint";
 
 describe("Loss Report - Detection Rules", () => {
@@ -343,6 +346,80 @@ describe("Loss Report - Detection Rules", () => {
     });
   });
 
+  describe("Rule 5: detectExcessFeeOvercharges", () => {
+    it("flags freight delivery charges exceeding PKR 400 ceiling", () => {
+      const settlements: SettlementInput[] = [
+        {
+          id: "s_over_1",
+          courier_id: "c_tcs",
+          courier_code: "tcs",
+          courier_name: "TCS",
+          awb: "TCS-HIGH-FEE",
+          cn: "TCS-HIGH-FEE",
+          order_ref: "ORD-HIGH-1",
+          remitted_paisa: 250000,
+          fee_delivery_paisa: 62000, // PKR 620 vs 400 standard ceiling
+          fee_return_paisa: 0,
+          fee_cash_handling_paisa: 4000,
+          settled_at: "2026-09-18",
+          settlement_id: "CPR-O1",
+          delivery_status: "Delivered",
+        },
+        {
+          id: "s_normal_1",
+          courier_id: "c_tcs",
+          courier_code: "tcs",
+          courier_name: "TCS",
+          awb: "TCS-NORMAL",
+          cn: "TCS-NORMAL",
+          order_ref: "ORD-NORM-1",
+          remitted_paisa: 250000,
+          fee_delivery_paisa: 22000, // PKR 220 (normal)
+          fee_return_paisa: 0,
+          fee_cash_handling_paisa: 3000,
+          settled_at: "2026-09-18",
+          settlement_id: "CPR-O1",
+          delivery_status: "Delivered",
+        },
+      ];
+
+      const items = detectExcessFeeOvercharges({ settlements });
+      expect(items).toHaveLength(1);
+      expect(items[0].category).toBe("excess_fee_overcharge");
+      expect(items[0].loss_paisa).toBe(22000); // 62000 - 40000
+      expect(items[0].loss_pkr).toBe(220);
+      expect(items[0].reason).toContain("Excessive delivery/freight charge");
+    });
+
+    it("flags cash handling deduction exceeding 2.5% contractual SLA", () => {
+      const settlements: SettlementInput[] = [
+        {
+          id: "s_cash_over",
+          courier_id: "c_postex",
+          courier_code: "postex",
+          courier_name: "PostEx",
+          awb: "PX-CASH-OVER",
+          cn: "PX-CASH-OVER",
+          order_ref: "ORD-CASH-1",
+          remitted_paisa: 200000, // PKR 2,000 base
+          fee_delivery_paisa: 20000,
+          fee_return_paisa: 0,
+          fee_cash_handling_paisa: 15000, // PKR 150 (7.5%!) vs 2.5% (PKR 50)
+          settled_at: "2026-09-19",
+          settlement_id: "CPR-P2",
+          delivery_status: "Delivered",
+        },
+      ];
+
+      const items = detectExcessFeeOvercharges({ settlements });
+      expect(items).toHaveLength(1);
+      expect(items[0].category).toBe("excess_fee_overcharge");
+      expect(items[0].loss_paisa).toBe(10000); // 15000 - 5000
+      expect(items[0].loss_pkr).toBe(100);
+      expect(items[0].reason).toContain("Excessive cash handling deduction");
+    });
+  });
+
   describe("Aggregations & Totals in PKR", () => {
     it("computes totals in PKR per courier and per category", () => {
       const items = [
@@ -516,7 +593,8 @@ describe("Loss Report - Detection Rules", () => {
       expect(draft.subject).toContain("PKR 268.00");
 
       // Verify email body contains key details
-      expect(draft.body).toContain("To: TCS Finance, Billing & COD Reconciliation Desk");
+      expect(draft.recipient_email).toBe("cod.support@tcs.com.pk");
+      expect(draft.body).toContain("cod.support@tcs.com.pk");
       expect(draft.body).toContain("ORD-TCS-001");
       expect(draft.body).toContain("779400000101");
       expect(draft.body).toContain("ORD-TCS-002");
@@ -528,6 +606,25 @@ describe("Loss Report - Detection Rules", () => {
       expect(draft.whatsapp_text).toContain("*Total Disputed Amount: PKR 268.00*");
       expect(draft.whatsapp_text).toContain("*Affected Shipments: 2*");
       expect(draft.whatsapp_text).toContain("779400000101");
+    });
+
+    it("maps all supported Pakistani couriers to official dispute desks and emails", () => {
+      const couriers = [
+        { code: "tcs", email: "cod.support@tcs.com.pk" },
+        { code: "postex", email: "support@postex.pk" },
+        { code: "leopards", email: "billing@leopardscourier.com" },
+        { code: "mnp", email: "codcare@mulphilog.com" },
+        { code: "trax", email: "billing@trax.pk" },
+        { code: "callcourier", email: "cod@callcourier.com.pk" },
+        { code: "rider", email: "support@withrider.com" },
+        { code: "swyft", email: "finance@swyftlogistics.com" },
+      ];
+
+      for (const c of couriers) {
+        const contact = getCourierDisputeContact(c.code);
+        expect(contact.email).toBe(c.email);
+        expect(contact.desk).toBeTruthy();
+      }
     });
 
     it("generates WhatsApp dispatch link with optional phone number", () => {
@@ -571,7 +668,7 @@ describe("Loss Report - Detection Rules", () => {
       expect(printable.contact_person).toBe("Zaid Khan");
       expect(printable.total_issues).toBe(1);
       expect(printable.total_loss_pkr).toBe(200);
-      expect(printable.category_totals).toHaveLength(4);
+      expect(printable.category_totals).toHaveLength(5);
       expect(printable.courier_breakdown[0].code).toBe("tcs");
     });
   });

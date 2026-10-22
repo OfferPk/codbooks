@@ -13,6 +13,8 @@ export interface ComplaintDraftOptions {
 export interface ComplaintDraft {
   courier_code: string;
   courier_name: string;
+  recipient_email: string | null;
+  recipient_desk: string | null;
   category: string;
   subject: string;
   body: string;
@@ -23,11 +25,62 @@ export interface ComplaintDraft {
   awb_list: string[];
 }
 
+export const COURIER_DISPUTE_EMAILS: Record<
+  string,
+  { email: string; desk: string }
+> = {
+  tcs: {
+    email: "cod.support@tcs.com.pk",
+    desk: "TCS Express & Logistics COD Billing & Claims",
+  },
+  postex: {
+    email: "support@postex.pk",
+    desk: "PostEx Merchant Support & Settlements",
+  },
+  leopards: {
+    email: "billing@leopardscourier.com",
+    desk: "Leopards Courier Service COD Reconciliation",
+  },
+  mnp: {
+    email: "codcare@mulphilog.com",
+    desk: "M&P Express Logistics COD Customer Care",
+  },
+  trax: {
+    email: "billing@trax.pk",
+    desk: "Trax Logistics Merchant Settlements",
+  },
+  callcourier: {
+    email: "cod@callcourier.com.pk",
+    desk: "Call Courier Services Accounts & Billing",
+  },
+  rider: {
+    email: "support@withrider.com",
+    desk: "Rider Pakistan Merchant Dispute Desk",
+  },
+  swyft: {
+    email: "finance@swyftlogistics.com",
+    desk: "Swyft Logistics Finance & Reconciliation",
+  },
+};
+
+export function getCourierDisputeContact(courierCode: string): {
+  email: string | null;
+  desk: string | null;
+} {
+  const norm = (courierCode || "").trim().toLowerCase();
+  const found = COURIER_DISPUTE_EMAILS[norm];
+  return {
+    email: found?.email || null,
+    desk: found?.desk || null,
+  };
+}
+
 const CATEGORY_NAMES: Record<LossCategory, string> = {
   short_payment: "Short COD Remittance",
   double_charged_fee: "Double-Charged / Duplicate Fees",
   return_marked_delivered: "Return / Delivered Status Discrepancies",
   held_payment: "Overdue Unpaid COD Held Over SLA",
+  excess_fee_overcharge: "Excess Fee / Weight Overcharge",
 };
 
 export function buildCourierComplaint(
@@ -117,7 +170,17 @@ export function buildCourierComplaint(
     return `${orderId} | ${tracking} | ${exp} | ${rem} | ${claim} | ${item.reason}`;
   });
 
-  const body = `To: ${courierName} Finance, Billing & COD Reconciliation Desk
+  const disputeContact = getCourierDisputeContact(courierCode);
+  const recipientEmail = disputeContact.email;
+  const recipientDesk =
+    disputeContact.desk ||
+    `${courierName} Finance, Billing & COD Reconciliation Desk`;
+
+  const toLine = recipientEmail
+    ? `To: ${recipientDesk} <${recipientEmail}>`
+    : `To: ${recipientDesk}`;
+
+  const body = `${toLine}
 From: ${merchantName}
 Date: ${nowStr}
 Subject: ${subject}
@@ -178,6 +241,8 @@ ${contactPhone ? `📞 ${contactPhone}` : ""}`;
   return {
     courier_code: courierCode,
     courier_name: courierName,
+    recipient_email: recipientEmail,
+    recipient_desk: disputeContact.desk,
     category: targetCategory,
     subject,
     body,

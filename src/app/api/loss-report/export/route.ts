@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
+import { audit } from "@/lib/db";
 import {
   exportLossReportCsv,
   getLossReport,
@@ -43,6 +44,14 @@ export async function GET(req: NextRequest) {
   const csv = exportLossReportCsv(items);
   const ymd = asOf.toISOString().slice(0, 10);
   const filename = `codbooks-loss-report-${ymd}.csv`;
+
+  audit(user.org_id, user.id, "export_loss_report", {
+    as_of: asOf.toISOString(),
+    courier: courierFilter || null,
+    category: categoryFilter || null,
+    shop_id: targetShopId,
+    item_count: items.length,
+  });
 
   return new NextResponse(csv, {
     status: 200,
